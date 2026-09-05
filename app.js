@@ -89,32 +89,14 @@
   async function toggleOrientation(){if(state.fallbackLandscape){document.body.classList.remove("fallback-landscape");state.fallbackLandscape=false;toast("通常表示に戻しました");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);return;}if(state.orientationLocked){try{screen.orientation?.unlock();if(document.fullscreenElement)await document.exitFullscreen();}catch(_){}state.orientationLocked=false;toast("画面方向の固定を解除しました");return;}try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(!screen.orientation?.lock)throw new Error("unsupported");await screen.orientation.lock("landscape");state.orientationLocked=true;toast("横画面にしました");}catch(_){if(matchMedia("(pointer: coarse)").matches){state.centerKm=center();document.body.classList.add("fallback-landscape");state.fallbackLandscape=true;toast("端末を横向きにしてください");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);}else toast("PCではウィンドウを横に広げてください");}}
 
   function gestures(v){
-    let gesture=null;
-    const touchDistance=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    const beginPan=(touch,target=null,allowTap=false)=>{gesture={kind:"pan",startX:touch.clientX,startY:touch.clientY,scrollLeft:v.scrollLeft,target,allowTap};};
-    const beginPinch=e=>{
-      const rect=v.getBoundingClientRect(),midX=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;
-      gesture={kind:"pinch",distance:touchDistance(e),zoom:state.zoom,km:(v.scrollLeft+midX-PAD)/state.zoom,midX};
-    };
-    v.addEventListener("touchstart",e=>{
-      e.preventDefault();v.closest('.workspace').classList.add('used');
-      if(e.touches.length>=2)beginPinch(e);else if(e.touches.length===1)beginPan(e.touches[0],e.target,true);
-    },{passive:false});
-    v.addEventListener("touchmove",e=>{
-      e.preventDefault();
-      if(e.touches.length>=2){
-        if(!gesture||gesture.kind!=="pinch")beginPinch(e);
-        const next=Math.max(fitZoom(),Math.min(600,gesture.zoom*touchDistance(e)/Math.max(1,gesture.distance)));
-        state.zoom=next;renderRoute();renderSpeed();
-        const rect=v.getBoundingClientRect(),midX=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;
-        v.scrollLeft=Math.max(0,PAD+gesture.km*state.zoom-midX);
-      }else if(e.touches.length===1){
-        if(!gesture||gesture.kind!=="pan")beginPan(e.touches[0],null,false);
-        v.scrollLeft=Math.max(0,gesture.scrollLeft-(e.touches[0].clientX-gesture.startX));
-      }
-    },{passive:false});
-    v.addEventListener("touchend",e=>{if(e.touches.length===1)beginPan(e.touches[0],null,false);else if(e.touches.length===0){const ended=e.changedTouches[0];if(gesture?.kind==="pan"&&gesture.allowTap&&ended&&Math.hypot(ended.clientX-gesture.startX,ended.clientY-gesture.startY)<8)showItem(gesture.target);gesture=null;save();}},{passive:true});
-    v.addEventListener("touchcancel",()=>{gesture=null;save();},{passive:true});
+    const pointers=new Map();let gesture=null;
+    const values=()=>[...pointers.values()];
+    const beginPan=point=>{gesture={kind:"pan",startX:point.x,scrollLeft:v.scrollLeft};};
+    const beginPinch=()=>{const [a,b]=values(),rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,distance=Math.hypot(a.x-b.x,a.y-b.y);gesture={kind:"pinch",distance:Math.max(1,distance),zoom:state.zoom,km:(v.scrollLeft+midX-PAD)/state.zoom};};
+    v.addEventListener("pointerdown",e=>{v.closest('.workspace').classList.add('used');v.setPointerCapture?.(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1)beginPan(values()[0]);else if(pointers.size===2)beginPinch();});
+    v.addEventListener("pointermove",e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size>=2){if(gesture?.kind!=="pinch")beginPinch();const [a,b]=values(),distance=Math.hypot(a.x-b.x,a.y-b.y),next=Math.max(fitZoom(),Math.min(600,gesture.zoom*distance/gesture.distance));state.zoom=next;renderRoute();renderSpeed();const rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left;v.scrollLeft=Math.max(0,PAD+gesture.km*state.zoom-midX);}else if(pointers.size===1){const point=values()[0];if(gesture?.kind!=="pan")beginPan(point);v.scrollLeft=Math.max(0,gesture.scrollLeft-(point.x-gesture.startX));}});
+    const end=e=>{pointers.delete(e.pointerId);if(pointers.size===1)beginPan(values()[0]);else if(pointers.size===0){gesture=null;save();}};
+    v.addEventListener("pointerup",end);v.addEventListener("pointercancel",end);v.addEventListener("lostpointercapture",e=>{if(pointers.has(e.pointerId))end(e);});
     v.addEventListener("scroll",()=>{clearTimeout(v.saveTimer);v.saveTimer=setTimeout(save,160);},{passive:true});
     v.addEventListener("wheel",e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(state.zoom*(e.deltaY>0?.88:1.14),center());},{passive:false});
   }
@@ -122,7 +104,7 @@
   buildSettings();
   $("#menuBtn").addEventListener("click",()=>openSettings(true));$("#menuClose").addEventListener("click",()=>openSettings(false));$("#scrim").addEventListener("click",()=>openSettings(false));
   $("#resetLayers").addEventListener("click",()=>{state.layers=Object.fromEntries(layerInfo.map(([key])=>[key,"auto"]));buildSettings();renderRoute();save();toast("すべて自動に戻しました");});
-  $("#fitBtn").addEventListener("click",fitAll);$("#orientationBtn").addEventListener("click",toggleOrientation);$("#infoClose").addEventListener("click",closeInfo);
+  $("#fitBtn").addEventListener("click",fitAll);$("#zoomInBtn").addEventListener("click",()=>setZoom(state.zoom*1.55));$("#zoomOutBtn").addEventListener("click",()=>setZoom(state.zoom/1.55));$("#orientationBtn").addEventListener("click",toggleOrientation);$("#infoClose").addEventListener("click",closeInfo);
   $$(".mode-tab").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));$$('[data-speed]').forEach(i=>i.addEventListener("change",renderSpeed));
   routeSvg.addEventListener("click",e=>showItem(e.target));routeSvg.addEventListener("keydown",e=>{if(["Enter"," "].includes(e.key))showItem(e.target);});
   document.addEventListener("contextmenu",e=>{if(!e.target.matches("input,textarea"))e.preventDefault();});document.addEventListener("dragstart",e=>e.preventDefault());
