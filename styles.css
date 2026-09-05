@@ -12,7 +12,7 @@ button{cursor:pointer}
 .main-stage{position:relative;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(0,1fr) 58px;background-color:var(--paper);background-image:radial-gradient(#6a635512 .7px,transparent .8px);background-size:7px 7px;overflow:hidden}
 .workspace{position:relative;min-height:0;overflow:hidden}
 .hidden{display:none!important}
-.rail-viewport{position:absolute;inset:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;touch-action:pan-x;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#8f8a7d var(--paper-deep)}
+.rail-viewport{position:absolute;inset:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;touch-action:none;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#8f8a7d var(--paper-deep)}
 .rail-viewport svg{display:block;height:100%;min-height:320px;background:transparent}
 .status-pills{position:absolute;top:8px;left:8px;z-index:3;display:flex;gap:5px;pointer-events:none}.status-pills span,.status-button{min-height:29px;padding:5px 8px;border:1px solid #c9c3b5;border-radius:999px;background:#f8f5eacc;color:#59605e;font-size:11px;box-shadow:0 2px 5px #554e3d16}.status-button{pointer-events:auto;font-weight:800}
 .gesture-hint{position:absolute;z-index:3;bottom:10px;left:50%;transform:translateX(-50%);padding:6px 11px;border-radius:999px;background:#173b4cda;color:#fff;font-size:11px;white-space:nowrap;pointer-events:none;transition:opacity .35s}.workspace.used .gesture-hint{opacity:0}

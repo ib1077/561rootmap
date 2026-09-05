@@ -88,8 +88,36 @@
   function toast(message){const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),2200);}
   async function toggleOrientation(){if(state.fallbackLandscape){document.body.classList.remove("fallback-landscape");state.fallbackLandscape=false;toast("通常表示に戻しました");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);return;}if(state.orientationLocked){try{screen.orientation?.unlock();if(document.fullscreenElement)await document.exitFullscreen();}catch(_){}state.orientationLocked=false;toast("画面方向の固定を解除しました");return;}try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(!screen.orientation?.lock)throw new Error("unsupported");await screen.orientation.lock("landscape");state.orientationLocked=true;toast("横画面にしました");}catch(_){if(matchMedia("(pointer: coarse)").matches){state.centerKm=center();document.body.classList.add("fallback-landscape");state.fallbackLandscape=true;toast("端末を横向きにしてください");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);}else toast("PCではウィンドウを横に広げてください");}}
 
-  let pinch=null;
-  function gestures(v){v.addEventListener("touchstart",e=>{v.closest('.workspace').classList.add('used');if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinch={d,zoom:state.zoom,center:center()};}},{passive:true});v.addEventListener("touchmove",e=>{if(pinch&&e.touches.length===2){e.preventDefault();const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);setZoom(pinch.zoom*d/pinch.d,pinch.center);}},{passive:false});v.addEventListener("touchend",()=>{pinch=null;save();},{passive:true});v.addEventListener("scroll",()=>{clearTimeout(v.saveTimer);v.saveTimer=setTimeout(save,160);},{passive:true});v.addEventListener("wheel",e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(state.zoom*(e.deltaY>0?.88:1.14),center());},{passive:false});}
+  function gestures(v){
+    let gesture=null;
+    const touchDistance=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    const beginPan=(touch,target=null,allowTap=false)=>{gesture={kind:"pan",startX:touch.clientX,startY:touch.clientY,scrollLeft:v.scrollLeft,target,allowTap};};
+    const beginPinch=e=>{
+      const rect=v.getBoundingClientRect(),midX=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;
+      gesture={kind:"pinch",distance:touchDistance(e),zoom:state.zoom,km:(v.scrollLeft+midX-PAD)/state.zoom,midX};
+    };
+    v.addEventListener("touchstart",e=>{
+      e.preventDefault();v.closest('.workspace').classList.add('used');
+      if(e.touches.length>=2)beginPinch(e);else if(e.touches.length===1)beginPan(e.touches[0],e.target,true);
+    },{passive:false});
+    v.addEventListener("touchmove",e=>{
+      e.preventDefault();
+      if(e.touches.length>=2){
+        if(!gesture||gesture.kind!=="pinch")beginPinch(e);
+        const next=Math.max(fitZoom(),Math.min(600,gesture.zoom*touchDistance(e)/Math.max(1,gesture.distance)));
+        state.zoom=next;renderRoute();renderSpeed();
+        const rect=v.getBoundingClientRect(),midX=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;
+        v.scrollLeft=Math.max(0,PAD+gesture.km*state.zoom-midX);
+      }else if(e.touches.length===1){
+        if(!gesture||gesture.kind!=="pan")beginPan(e.touches[0],null,false);
+        v.scrollLeft=Math.max(0,gesture.scrollLeft-(e.touches[0].clientX-gesture.startX));
+      }
+    },{passive:false});
+    v.addEventListener("touchend",e=>{if(e.touches.length===1)beginPan(e.touches[0],null,false);else if(e.touches.length===0){const ended=e.changedTouches[0];if(gesture?.kind==="pan"&&gesture.allowTap&&ended&&Math.hypot(ended.clientX-gesture.startX,ended.clientY-gesture.startY)<8)showItem(gesture.target);gesture=null;save();}},{passive:true});
+    v.addEventListener("touchcancel",()=>{gesture=null;save();},{passive:true});
+    v.addEventListener("scroll",()=>{clearTimeout(v.saveTimer);v.saveTimer=setTimeout(save,160);},{passive:true});
+    v.addEventListener("wheel",e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(state.zoom*(e.deltaY>0?.88:1.14),center());},{passive:false});
+  }
 
   buildSettings();
   $("#menuBtn").addEventListener("click",()=>openSettings(true));$("#menuClose").addEventListener("click",()=>openSettings(false));$("#scrim").addEventListener("click",()=>openSettings(false));
