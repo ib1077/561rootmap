@@ -94,9 +94,42 @@
           <div class="info-main"><strong id="infoName">詳細情報</strong><span id="infoKm">設備を選択してください</span></div>
           <div class="info-detail"><span id="infoType">駅・信号機・地上子などをタップ</span><span id="infoRelation">選択した設備の情報をここに表示します</span></div>
         </section>
+        <section id="timePanel" class="time-panel" aria-label="所要時間計算" aria-hidden="true">
+          <div class="time-head">
+            <div><strong>所要時間</strong><span id="timeRangeLabel">全線　0k000m ― 56k100m</span></div>
+            <button id="timeClose" class="info-close" aria-label="時間計算を閉じる">×</button>
+          </div>
+          <div class="time-results" aria-live="polite">
+            <div class="time-result up"><span>7000 上り</span><strong id="upTimeResult">--:--</strong><small id="upAverageResult">平均 -- km/h</small></div>
+            <div class="time-result down"><span>7000 下り</span><strong id="downTimeResult">--:--</strong><small id="downAverageResult">平均 -- km/h</small></div>
+            <div class="time-distance"><span>計算距離</span><strong id="timeDistanceResult">56.100 km</strong><small>100mごとの速度から計算</small></div>
+          </div>
+          <div class="time-methods" role="tablist" aria-label="区間指定方法">
+            <button class="time-method active" data-time-method="all">全線</button>
+            <button class="time-method" data-time-method="station">駅間</button>
+            <button class="time-method" data-time-method="express">特急</button>
+            <button class="time-method" data-time-method="distance">距離</button>
+          </div>
+          <div class="time-controls">
+            <div class="time-control active" data-time-control="all"><span>上郡側 0k000m から 智頭側 56k100m まで</span></div>
+            <div class="time-control station-control" data-time-control="station">
+              <label><span>開始駅</span><select id="startStation"></select></label><span class="range-arrow">―</span><label><span>終了駅</span><select id="endStation"></select></label>
+            </div>
+            <div class="time-control express-control" data-time-control="express">
+              <span>特急停車駅間</span><div id="expressPresets" class="express-presets"></div>
+            </div>
+            <div class="time-control distance-control" data-time-control="distance">
+              <label><span>開始</span><span class="km-entry"><input id="startKm" type="number" min="0" max="56" value="0" inputmode="numeric"><b>k</b><input id="startM" type="number" min="0" max="999" value="0" inputmode="numeric"><b>m</b></span></label>
+              <span class="range-arrow">―</span>
+              <label><span>終了</span><span class="km-entry"><input id="endKm" type="number" min="0" max="56" value="56" inputmode="numeric"><b>k</b><input id="endM" type="number" min="0" max="999" value="100" inputmode="numeric"><b>m</b></span></label>
+            </div>
+          </div>
+          <div class="time-note">停車時間は含みません。速度曲線上の値を区間平均して算出します。</div>
+        </section>
         <nav class="dock-tabs" aria-label="下部表示切替">
           <button id="detailDockBtn" class="dock-button" aria-expanded="false"><span class="dock-icon">ⓘ</span><span class="dock-label">詳細</span><small id="dockDetailHint">選択なし</small></button>
           <button id="assetStripToggle" class="dock-button" aria-expanded="false"><span class="dock-icon">▤</span><span class="dock-label">設備</span><small id="assetDockState">非表示</small></button>
+          <button id="timeDockBtn" class="dock-button" aria-expanded="false"><span class="dock-icon">◷</span><span class="dock-label">時間</span><small id="timeDockState">全線を計算</small></button>
         </nav>
       </section>
     </main>

@@ -15,6 +15,7 @@
   const assetStripCanvas = $("#assetStripCanvas");
   const positionSlider = $("#positionSlider");
   const positionOutput = $("#positionOutput");
+  const EXPRESS_STOP_NAMES = ["上郡", "佐用", "大原", "智頭"];
   let stripHits = [], stripGesture = null, stripFrame = 0;
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem("chizu-line-v2-view") || "null"); } catch (_) { saved = null; }
@@ -33,6 +34,9 @@
     selectedAssetId: Number.isFinite(saved?.selectedAssetId) ? saved.selectedAssetId : null,
     assetStripOpen: saved?.assetStripOpen === true,
     routeYRatio: Number.isFinite(saved?.routeYRatio) ? saved.routeYRatio : .5,
+    timeMethod: ["all","station","express","distance"].includes(saved?.timeMethod) ? saved.timeMethod : "all",
+    timeStart: Number.isFinite(saved?.timeStart) ? saved.timeStart : 0,
+    timeEnd: Number.isFinite(saved?.timeEnd) ? saved.timeEnd : TOTAL,
     selected: null, fallbackLandscape: false, orientationLocked: false
   };
   const minY = Math.min(...D.gradient.map(point => point.y));
@@ -42,6 +46,7 @@
   const assetText = value => value===null||value===undefined ? "" : String(value);
   const assetKmText = km => {const m=Math.round(Number(km)*1000),a=Math.abs(m);return `${m<0?"−":""}${Math.floor(a/1000)}k${String(a%1000).padStart(3,"0")}m`;};
   const curveSpans = (() => { const spans=[]; let active=null; for(const item of D.curves){ if(["BC","BTC","BIT"].includes(item.mark)) active={start:item.km,radius:item.radius}; if(active&&["EC","ETC","EIT"].includes(item.mark)){spans.push({...active,end:item.km});active=null;} } return spans.filter(item=>item.end>item.start); })();
+  const expressStops = EXPRESS_STOP_NAMES.map(name=>D.stations.find(station=>station.name===name)).filter(Boolean);
 
   function interpolateY(km) {
     if (km <= D.gradient[0].km) return D.gradient[0].y;
@@ -77,6 +82,7 @@
     routeCanvas.style.width=`${width}px`;routeCanvas.style.height=`${canvasHeight}px`;
     routeSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);routeSvg.setAttribute("width",width);routeSvg.setAttribute("height",height);routeSvg.style.width=`${width}px`;routeSvg.style.height=`${height}px`;routeSvg.style.top=`${Math.max(0,(canvasHeight-height)/2)}px`;
     let out=`<rect width="${width}" height="${height}" fill="#f2efe4" opacity=".96"/>`;
+    if($("#timePanel")?.classList.contains("open")){const start=Math.min(state.timeStart,state.timeEnd),end=Math.max(state.timeStart,state.timeEnd);out+=`<rect class="time-range-highlight" x="${x(start)}" y="22" width="${Math.max(2,(end-start)*state.zoom)}" height="${height-50}"/><line class="time-range-edge" x1="${x(start)}" y1="22" x2="${x(start)}" y2="${height-28}"/><line class="time-range-edge" x1="${x(end)}" y1="22" x2="${x(end)}" y2="${height-28}"/>`;}
     const step=state.zoom<16?5:state.zoom<55?1:.1;
     for(let km=0;km<=TOTAL+.0001;km+=step){const n=Math.round(km*10)/10,major=Math.abs(n%5)<.001;out+=`<line class="rail-grid${major?" major":""}" x1="${x(n)}" y1="22" x2="${x(n)}" y2="${height-28}"/>`;if(major||state.zoom>=42)out+=`<text class="km-label" x="${x(n)+3}" y="18">${state.zoom>=85?kmText(n):`${Number(n.toFixed(1))}k`}</text>`;}
     if(state.mode==="speed")for(const v of [40,80,120]){const yy=speedY(v,height);out+=`<line class="speed-overlay-guide" x1="${PAD}" y1="${yy}" x2="${width-PAD}" y2="${yy}"/>`;for(let km=0;km<=TOTAL;km+=10)out+=`<text class="speed-overlay-label" x="${x(km)+3}" y="${yy-3}">${v}</text>`;}
@@ -117,11 +123,49 @@
   function nearestAsset(km){return ASSETS.reduce((best,row)=>Math.abs(row.distanceKm-km)<Math.abs(best.distanceKm-km)?row:best,ASSETS[0]);}
   function assetForType(type,km){const match={"駅":["駅"],"トンネル":["T始点","T終点"],"勾配":["勾配","‰"],"曲線":["曲線"],"信号機":["信号機"],"有電源地上子":["有電源地上子"],"無電源地上子":["無電源地上子"],"避難口":["避難口"]}[type];if(!match)return null;const rows=ASSETS.filter(row=>match.includes(row.category));if(!rows.length)return null;const row=rows.reduce((best,item)=>Math.abs(item.distanceKm-km)<Math.abs(best.distanceKm-km)?item:best,rows[0]);return Math.abs(row.distanceKm-km)<=.08?row:null;}
   function updateDetailDock(name,km){$("#dockDetailHint").textContent=`${km}　${name}`;$("#detailDockBtn").classList.add("has-data");}
-  function setDetailPanel(open){const panel=$("#infoBar"),button=$("#detailDockBtn");panel.classList.toggle("open",Boolean(open));panel.setAttribute("aria-hidden",String(!open));button.classList.toggle("active",Boolean(open));button.setAttribute("aria-expanded",String(Boolean(open)));}
+  function setDetailPanel(open){const panel=$("#infoBar"),button=$("#detailDockBtn");if(open)setTimePanel(false);panel.classList.toggle("open",Boolean(open));panel.setAttribute("aria-hidden",String(!open));button.classList.toggle("active",Boolean(open));button.setAttribute("aria-expanded",String(Boolean(open)));}
   function showAssetDetails(row){const km=Math.max(0,Math.min(TOTAL,row.distanceKm)),extras=[row.supplementalA,row.supplementalB,row.supplementalC,row.supplementalD,row.supplementalE,row.supplementalF].filter(value=>value!==null&&value!==undefined&&value!=="");selectAsset(row.id);state.selected={km};$("#infoName").textContent=assetSummary(row);$("#infoKm").textContent=assetKmText(row.distanceKm);$("#infoType").textContent=`${row.category}　距離順 ${row.distanceOrder}`;$("#infoRelation").textContent=extras.length?extras.join(" ／ "):"設備帯で選択した位置";updateDetailDock(assetSummary(row),assetKmText(row.distanceKm));renderRoute();save();}
   function showStripHit(hit){if(hit.row){showAssetDetails(hit.row);return;}state.selected={km:Math.max(0,Math.min(TOTAL,hit.km))};$("#infoName").textContent=hit.name;$("#infoKm").textContent=assetKmText(hit.km);$("#infoType").textContent=`${hit.type}　${hit.detail}`;$("#infoRelation").textContent=hit.relation;updateDetailDock(hit.name,assetKmText(hit.km));renderRoute();}
   function queueStripRender(){if(stripFrame)return;stripFrame=requestAnimationFrame(()=>{stripFrame=0;renderAssetStrip();});}
-  function setAssetStripOpen(open,persist=true){state.assetStripOpen=Boolean(open);document.body.classList.toggle("asset-strip-open",state.assetStripOpen);const button=$("#assetStripToggle");button.classList.toggle("active",state.assetStripOpen);button.setAttribute("aria-expanded",String(state.assetStripOpen));$("#assetDockState").textContent=state.assetStripOpen?"表示中":"非表示";if(state.assetStripOpen)setTimeout(renderAssetStrip,190);else stripHits=[];if(persist)save();}
+  function setAssetStripOpen(open,persist=true){state.assetStripOpen=Boolean(open);if(state.assetStripOpen)setTimePanel(false);document.body.classList.toggle("asset-strip-open",state.assetStripOpen);const button=$("#assetStripToggle");button.classList.toggle("active",state.assetStripOpen);button.setAttribute("aria-expanded",String(state.assetStripOpen));$("#assetDockState").textContent=state.assetStripOpen?"表示中":"非表示";if(state.assetStripOpen)setTimeout(renderAssetStrip,190);else stripHits=[];if(persist)save();}
+
+  function speedAt(km,direction){
+    const value=Math.max(0,Math.min(TOTAL,Number(km)||0)),points=D.speeds;
+    if(value<=points[0].km)return Number(points[0][direction])||0;
+    for(let i=1;i<points.length;i+=1)if(value<=points[i].km){const a=points[i-1],b=points[i],ratio=(value-a.km)/(b.km-a.km||1);return (Number(a[direction])||0)+((Number(b[direction])||0)-(Number(a[direction])||0))*ratio;}
+    return Number(points.at(-1)[direction])||0;
+  }
+  function travelTime(start,end,direction){
+    const low=Math.min(start,end),high=Math.max(start,end),distance=high-low;
+    if(distance<=0)return {seconds:0,average:0};
+    const points=[low,...D.speeds.map(point=>point.km).filter(km=>km>low&&km<high),high];let seconds=0;
+    for(let i=1;i<points.length;i+=1){const a=points[i-1],b=points[i],averageSpeed=(speedAt(a,direction)+speedAt(b,direction))/2;if(averageSpeed<=0)return null;seconds+=(b-a)*3600/averageSpeed;}
+    return {seconds,average:distance*3600/seconds};
+  }
+  function formatTime(seconds){const total=Math.max(0,Math.round(seconds));if(total>=3600)return `${Math.floor(total/3600)}:${String(Math.floor(total%3600/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`;return `${Math.floor(total/60)}:${String(total%60).padStart(2,"0")}`;}
+  function setTimeResult(id,result){$(id).textContent=result?formatTime(result.seconds):"計算不可";$(id.replace("Time","Average")).textContent=result?`平均 ${Math.round(result.average)} km/h`:"速度を確認";}
+  function updateTimeCalculation(start=state.timeStart,end=state.timeEnd,label=null){
+    state.timeStart=Math.max(0,Math.min(TOTAL,Number(start)||0));state.timeEnd=Math.max(0,Math.min(TOTAL,Number(end)||0));
+    const low=Math.min(state.timeStart,state.timeEnd),high=Math.max(state.timeStart,state.timeEnd),rangeLabel=label||`${kmText(state.timeStart)} ― ${kmText(state.timeEnd)}`;
+    $("#timeRangeLabel").textContent=`${rangeLabel}　${kmText(state.timeStart)} ― ${kmText(state.timeEnd)}`;$("#timeDistanceResult").textContent=`${(high-low).toFixed(3)} km`;
+    setTimeResult("#upTimeResult",travelTime(low,high,"up"));setTimeResult("#downTimeResult",travelTime(low,high,"down"));
+    $("#timeDockState").textContent=state.timeMethod==="all"?"全線を計算":rangeLabel;renderRoute();save();
+  }
+  function setTimeMethod(method,refresh=true){
+    state.timeMethod=method;$$('[data-time-method]').forEach(button=>button.classList.toggle("active",button.dataset.timeMethod===method));$$('[data-time-control]').forEach(control=>control.classList.toggle("active",control.dataset.timeControl===method));
+    if(!refresh)return;
+    if(method==="all")updateTimeCalculation(0,TOTAL,"全線");else if(method==="station")updateStationTime();else if(method==="express")selectExpressPreset(0);else updateDistanceTime();
+  }
+  function updateStationTime(){const a=D.stations[Number($("#startStation").value)]||D.stations[0],b=D.stations[Number($("#endStation").value)]||D.stations.at(-1);updateTimeCalculation(a.km,b.km,`${a.name}駅 ― ${b.name}駅`);}
+  function selectExpressPreset(index){const a=expressStops[index],b=expressStops[index+1];if(!a||!b)return;$$('[data-express-index]').forEach(button=>button.classList.toggle("active",Number(button.dataset.expressIndex)===index));updateTimeCalculation(a.km,b.km,`${a.name} ― ${b.name}`);}
+  function distanceValue(prefix){const km=Math.max(0,Number($(`#${prefix}Km`).value)||0),m=Math.max(0,Number($(`#${prefix}M`).value)||0);return Math.min(TOTAL,km+m/1000);}
+  function updateDistanceTime(){updateTimeCalculation(distanceValue("start"),distanceValue("end"));}
+  function setTimePanel(open){const panel=$("#timePanel"),button=$("#timeDockBtn");if(!panel||!button)return;panel.classList.toggle("open",Boolean(open));panel.setAttribute("aria-hidden",String(!open));button.classList.toggle("active",Boolean(open));button.setAttribute("aria-expanded",String(Boolean(open)));if(open){setDetailPanel(false);if(state.assetStripOpen)setAssetStripOpen(false);renderRoute();}else renderRoute();}
+  function buildTimeControls(){
+    const options=D.stations.map((station,index)=>`<option value="${index}">${station.name}　${kmText(station.km)}</option>`).join("");$("#startStation").innerHTML=options;$("#endStation").innerHTML=options;$("#startStation").value="0";$("#endStation").value=String(D.stations.length-1);
+    $("#expressPresets").innerHTML=expressStops.slice(0,-1).map((station,index)=>`<button data-express-index="${index}">${station.name} ― ${expressStops[index+1].name}</button>`).join("");
+    setTimeMethod(state.timeMethod,false);updateTimeCalculation(state.timeStart,state.timeEnd,state.timeMethod==="all"?"全線":null);
+  }
 
   function updateStageLabel(){const label=state.zoom<18?"全体":state.zoom<68?"線路":state.zoom<110?"設備":"詳細";$("#fitBtn").textContent=label==="全体"?"全体":`${label}・全体へ`;}
   function viewport(){return routeViewport;}
@@ -129,7 +173,7 @@
   function fitZoom(){return Math.max(4,((viewport().clientWidth||innerWidth)-PAD*2)/TOTAL);}
   function routeRatio(){if(!routeViewport.clientHeight)return state.routeYRatio;const max=routeViewport.scrollHeight-routeViewport.clientHeight;return max>0?routeViewport.scrollTop/max:.5;}
   function updateNavigator(km=center()){const value=Math.max(0,Math.min(TOTAL,km));positionSlider.value=value.toFixed(2);positionOutput.value=kmText(value);positionOutput.textContent=kmText(value);}
-  function save(){state.routeYRatio=routeRatio();try{localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers,speedDirections:state.speedDirections,selectedAssetId:state.selectedAssetId,assetStripOpen:state.assetStripOpen}));}catch(_){}}
+  function save(){state.routeYRatio=routeRatio();try{localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers,speedDirections:state.speedDirections,selectedAssetId:state.selectedAssetId,assetStripOpen:state.assetStripOpen,timeMethod:state.timeMethod,timeStart:state.timeStart,timeEnd:state.timeEnd}));}catch(_){}}
   function scrollCenter(km,instant=false){const v=viewport();v.scrollTo({left:Math.max(0,x(km)-v.clientWidth/2),behavior:instant?"auto":"smooth"});updateNavigator(km);}
   function restoreRouteY(ratio=state.routeYRatio){const max=routeViewport.scrollHeight-routeViewport.clientHeight;routeViewport.scrollTop=Math.max(0,Math.min(max,max*ratio));}
   function setZoom(next,km=center()){const yRatio=routeRatio();state.zoom=Math.max(fitZoom(),Math.min(600,next));renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);save();});}
@@ -138,7 +182,7 @@
   function closeInfo(){state.selected=null;$("#infoName").textContent="詳細情報";$("#infoKm").textContent="設備を選択してください";$("#infoType").textContent="駅・信号機・地上子などをタップ";$("#infoRelation").textContent="選択した設備の情報をここに表示します";$("#dockDetailHint").textContent="選択なし";$("#detailDockBtn").classList.remove("has-data");setDetailPanel(false);renderRoute();}
   function buildSettings(){$("#layerSettings").innerHTML=layerInfo.map(([key,label,desc])=>`<div class="layer-row"><div class="layer-label"><strong>${label}</strong><span>${desc}</span></div><div class="tri-state" data-layer="${key}">${[["auto","自動"],["show","表示"],["hide","非表示"]].map(([value,text])=>`<button data-value="${value}" class="${(state.layers[key]||"auto")===value?"active":""}">${text}</button>`).join("")}</div></div>`).join("");$$('.tri-state button').forEach(b=>b.addEventListener("click",()=>{const h=b.closest('.tri-state');state.layers[h.dataset.layer]=b.dataset.value;h.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderRoute();save();}));}
   function openSettings(open){$("#settings").classList.toggle("open",open);$("#settings").setAttribute("aria-hidden",String(!open));$("#scrim").classList.toggle("hidden",!open);}
-  function setMode(mode,requestedKm=null){const previous=state.mode,old=requestedKm===null?(state.zoom?center():state.centerKm):requestedKm;state.mode=mode;$$('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));document.body.classList.toggle("list-mode",mode==="list");$("#routeWorkspace").classList.toggle("hidden",mode==="list");$("#speedWorkspace").classList.add("hidden");$("#assetWorkspace").classList.toggle("hidden",mode!=="list");$("#speedOverlayTools").classList.toggle("hidden",mode!=="speed");$("#modeTitle").textContent=mode==="route"?"路線図":mode==="speed"?"路線＋速度":"設備一覧";if(mode==="list"){if(!selectedAsset()&&ASSETS.length)selectAsset(nearestAsset(old).id);updateAssetSelection(true);}else{closeInfo();requestAnimationFrame(()=>{renderRoute();scrollCenter(old,true);restoreRouteY();});}const target=mode==="list"?$("#assetWorkspace"):$("#routeWorkspace");target.classList.remove("mode-enter-up","mode-enter-down");void target.offsetWidth;target.classList.add(previous==="list"?"mode-enter-down":"mode-enter-up");setTimeout(()=>target.classList.remove("mode-enter-up","mode-enter-down"),240);save();}
+  function setMode(mode,requestedKm=null){const previous=state.mode,old=requestedKm===null?(state.zoom?center():state.centerKm):requestedKm;state.mode=mode;$$('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));document.body.classList.toggle("list-mode",mode==="list");$("#routeWorkspace").classList.toggle("hidden",mode==="list");$("#speedWorkspace").classList.add("hidden");$("#assetWorkspace").classList.toggle("hidden",mode!=="list");$("#speedOverlayTools").classList.toggle("hidden",mode!=="speed");$("#modeTitle").textContent=mode==="route"?"路線図":mode==="speed"?"路線＋速度":"設備一覧";if(mode==="list"){setTimePanel(false);if(!selectedAsset()&&ASSETS.length)selectAsset(nearestAsset(old).id);updateAssetSelection(true);}else{closeInfo();requestAnimationFrame(()=>{renderRoute();scrollCenter(old,true);restoreRouteY();});}const target=mode==="list"?$("#assetWorkspace"):$("#routeWorkspace");target.classList.remove("mode-enter-up","mode-enter-down");void target.offsetWidth;target.classList.add(previous==="list"?"mode-enter-down":"mode-enter-up");setTimeout(()=>target.classList.remove("mode-enter-up","mode-enter-down"),240);save();}
   function toast(message){const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),2200);}
   async function toggleOrientation(){if(state.fallbackLandscape){document.body.classList.remove("fallback-landscape");state.fallbackLandscape=false;toast("通常表示に戻しました");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);return;}if(state.orientationLocked){try{screen.orientation?.unlock();if(document.fullscreenElement)await document.exitFullscreen();}catch(_){}state.orientationLocked=false;toast("画面方向の固定を解除しました");return;}try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(!screen.orientation?.lock)throw new Error("unsupported");await screen.orientation.lock("landscape");state.orientationLocked=true;toast("横画面にしました");}catch(_){if(matchMedia("(pointer: coarse)").matches){state.centerKm=center();document.body.classList.add("fallback-landscape");state.fallbackLandscape=true;toast("端末を横向きにしてください");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);}else toast("PCではウィンドウを横に広げてください");}}
 
@@ -166,6 +210,10 @@
   $("#backToListBtn").addEventListener("click",()=>setMode("list"));
   $("#detailDockBtn").addEventListener("click",()=>{const open=!$("#infoBar").classList.contains("open");if(open&&state.assetStripOpen)setAssetStripOpen(false);setDetailPanel(open);});
   $("#assetStripToggle").addEventListener("click",()=>{const open=!state.assetStripOpen;if(open)setDetailPanel(false);setAssetStripOpen(open);});
+  $("#timeDockBtn").addEventListener("click",()=>setTimePanel(!$("#timePanel").classList.contains("open")));$("#timeClose").addEventListener("click",()=>setTimePanel(false));
+  $$('[data-time-method]').forEach(button=>button.addEventListener("click",()=>setTimeMethod(button.dataset.timeMethod)));$("#startStation").addEventListener("change",updateStationTime);$("#endStation").addEventListener("change",updateStationTime);
+  $("#expressPresets").addEventListener("click",event=>{const button=event.target.closest("[data-express-index]");if(button)selectExpressPreset(Number(button.dataset.expressIndex));});
+  for(const id of ["#startKm","#startM","#endKm","#endM"])$(id).addEventListener("change",updateDistanceTime);
   $$(".mode-tab").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));$$('[data-speed]').forEach(i=>{i.checked=state.speedDirections.includes(i.dataset.speed);i.addEventListener("change",()=>{state.speedDirections=$$('[data-speed]:checked').map(item=>item.dataset.speed);renderRoute();renderSpeed();save();});});
   routeSvg.addEventListener("click",e=>showItem(e.target,e));routeSvg.addEventListener("keydown",e=>{if(["Enter"," "].includes(e.key))showItem(e.target,e);});
   assetStrip.addEventListener("pointerdown",event=>{if(!state.assetStripOpen||event.target.closest("button")||stripGesture)return;assetStrip.setPointerCapture?.(event.pointerId);stripGesture={id:event.pointerId,startX:event.clientX,startScroll:routeViewport.scrollLeft,moved:false};});
@@ -177,5 +225,5 @@
   gestures(routeViewport);gestures(speedViewport);renderAssetTable();updateAssetSelection();
   window.addEventListener("resize",()=>{const km=center(),yRatio=routeRatio();renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);});});
   if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));
-  requestAnimationFrame(()=>{state.zoom=state.zoom===null?fitZoom():Math.max(fitZoom(),Math.min(600,state.zoom));renderRoute();renderSpeed();setMode(state.mode);requestAnimationFrame(()=>{scrollCenter(saved?state.centerKm:TOTAL/2,true);restoreRouteY();});});
+  requestAnimationFrame(()=>{state.zoom=state.zoom===null?fitZoom():Math.max(fitZoom(),Math.min(600,state.zoom));buildTimeControls();renderRoute();renderSpeed();setMode(state.mode);requestAnimationFrame(()=>{scrollCenter(saved?state.centerKm:TOTAL/2,true);restoreRouteY();});});
 })();
