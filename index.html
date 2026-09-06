@@ -37,7 +37,6 @@
         </div>
         <div id="assetStrip" class="route-asset-strip" aria-label="路線図と同じ縮尺の設備帯">
           <canvas id="assetStripCanvas"></canvas>
-          <button id="assetStripToggle" class="asset-strip-toggle" aria-expanded="false">設備帯 ▲</button>
           <div class="asset-strip-lanes" aria-hidden="true"><span>駅・Ｔ</span><span>線形</span><span>信号</span><span>地上子</span></div>
         </div>
         <div id="speedOverlayTools" class="speed-overlay-tools hidden" aria-label="速度カーブ選択">
@@ -89,10 +88,16 @@
         <output id="positionOutput" for="positionSlider">28k050m</output>
       </section>
 
-      <section id="infoBar" class="info-bar" aria-live="polite">
-        <button id="infoClose" class="info-close hidden" aria-label="詳細を閉じる">×</button>
-        <div class="info-main"><strong id="infoName">全線表示</strong><span id="infoKm">0k000m — 56k100m</span></div>
-        <div class="info-detail"><span id="infoType">駅・トンネルを表示中</span><span id="infoRelation">設備をタップすると詳しく表示します</span></div>
+      <section class="bottom-dock" aria-label="表示パネル">
+        <section id="infoBar" class="info-bar" aria-live="polite" aria-hidden="true">
+          <button id="infoClose" class="info-close" aria-label="詳細を閉じる">×</button>
+          <div class="info-main"><strong id="infoName">詳細情報</strong><span id="infoKm">設備を選択してください</span></div>
+          <div class="info-detail"><span id="infoType">駅・信号機・地上子などをタップ</span><span id="infoRelation">選択した設備の情報をここに表示します</span></div>
+        </section>
+        <nav class="dock-tabs" aria-label="下部表示切替">
+          <button id="detailDockBtn" class="dock-button" aria-expanded="false"><span class="dock-icon">ⓘ</span><span class="dock-label">詳細</span><small id="dockDetailHint">選択なし</small></button>
+          <button id="assetStripToggle" class="dock-button" aria-expanded="false"><span class="dock-icon">▤</span><span class="dock-label">設備</span><small id="assetDockState">非表示</small></button>
+        </nav>
       </section>
     </main>
 
