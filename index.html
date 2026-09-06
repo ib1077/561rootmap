@@ -35,6 +35,11 @@
             <svg id="railSvg" role="img" aria-label="智頭線の連続路線図"></svg>
           </div>
         </div>
+        <div id="assetStrip" class="route-asset-strip" aria-label="路線図と同じ縮尺の設備帯">
+          <canvas id="assetStripCanvas"></canvas>
+          <div class="asset-strip-title">設備帯</div>
+          <div class="asset-strip-lanes" aria-hidden="true"><span>駅・Ｔ</span><span>線形</span><span>信号</span><span>地上子</span></div>
+        </div>
         <div id="speedOverlayTools" class="speed-overlay-tools hidden" aria-label="速度カーブ選択">
           <strong>7000</strong>
           <label class="line-toggle up"><input type="checkbox" data-speed="up" checked><span>上り</span></label>
