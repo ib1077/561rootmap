@@ -9,6 +9,8 @@
   const speedViewport = $("#speedViewport");
   const routeSvg = $("#railSvg");
   const speedSvg = $("#speedSvg");
+  const positionSlider = $("#positionSlider");
+  const positionOutput = $("#positionOutput");
   const saved = JSON.parse(localStorage.getItem("chizu-line-v2-view") || "null");
   const layerInfo = [
     ["stations", "駅", "全体から表示"], ["tunnels", "トンネル", "全体から表示"],
@@ -21,6 +23,7 @@
     zoom: Number.isFinite(saved?.zoom) ? saved.zoom : null,
     centerKm: Number.isFinite(saved?.centerKm) ? saved.centerKm : TOTAL / 2,
     layers: saved?.layers || Object.fromEntries(layerInfo.map(([key]) => [key, "auto"])),
+    routeYRatio: Number.isFinite(saved?.routeYRatio) ? saved.routeYRatio : .5,
     selected: null, fallbackLandscape: false, orientationLocked: false
   };
   const minY = Math.min(...D.gradient.map(point => point.y));
@@ -35,7 +38,8 @@
     return D.gradient.at(-1).y;
   }
   function x(km){return PAD+km*state.zoom;}
-  function routeY(value,height){return 58+(maxY-value)/(maxY-minY||1)*Math.max(150,height-126);}
+  function routeContentHeight(){return Math.max(480,Math.round((routeViewport.clientHeight||400)*1.5));}
+  function routeY(value,height){const visible=Math.max(260,routeViewport.clientHeight||height/1.5),span=Math.min(height-120,visible*.78),top=(height-span)/2;return top+(maxY-value)/(maxY-minY||1)*span;}
   function routePath(points,height){return points.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${routeY(p.y,height).toFixed(1)}`).join(" ");}
   function pointsBetween(start,end){return [{km:start,y:interpolateY(start)},...D.gradient.filter(p=>p.km>start&&p.km<end),{km:end,y:interpolateY(end)}];}
   function autoVisible(layer){if(["stations","tunnels"].includes(layer))return true;if(["gradient","curves"].includes(layer))return state.zoom>=24;if(["signals","points","exits"].includes(layer))return state.zoom>=68;if(layer==="balises")return state.zoom>=110;return false;}
@@ -43,8 +47,8 @@
   function attrs(type,name,km,detail="",relation=""){return `class="clickable" tabindex="0" role="button" data-type="${escapeHtml(type)}" data-name="${escapeHtml(name)}" data-km="${km}" data-detail="${escapeHtml(detail)}" data-relation="${escapeHtml(relation)}"`;}
 
   function renderRoute(){
-    const height=Math.max(320,routeViewport.clientHeight||480),width=Math.max(routeViewport.clientWidth,PAD*2+TOTAL*state.zoom);
-    routeSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);routeSvg.setAttribute("width",width);routeSvg.setAttribute("height",height);
+    const height=routeContentHeight(),width=Math.max(routeViewport.clientWidth,PAD*2+TOTAL*state.zoom);
+    routeSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);routeSvg.setAttribute("width",width);routeSvg.setAttribute("height",height);routeSvg.style.height=`${height}px`;
     let out=`<rect width="${width}" height="${height}" fill="#f2efe4" opacity=".96"/>`;
     const step=state.zoom<16?5:state.zoom<55?1:.1;
     for(let km=0;km<=TOTAL+.0001;km+=step){const n=Math.round(km*10)/10,major=Math.abs(n%5)<.001;out+=`<line class="rail-grid${major?" major":""}" x1="${x(n)}" y1="22" x2="${x(n)}" y2="${height-28}"/>`;if(major||state.zoom>=42)out+=`<text class="km-label" x="${x(n)+3}" y="18">${state.zoom>=85?kmText(n):`${Number(n.toFixed(1))}k`}</text>`;}
@@ -76,28 +80,31 @@
   function viewport(){return state.mode==="route"?routeViewport:speedViewport;}
   function center(){const v=viewport();return Math.max(0,Math.min(TOTAL,(v.scrollLeft+v.clientWidth/2-PAD)/state.zoom));}
   function fitZoom(){return Math.max(4,((viewport().clientWidth||innerWidth)-PAD*2)/TOTAL);}
-  function save(){localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),layers:state.layers}));}
-  function scrollCenter(km,instant=false){const v=viewport();v.scrollTo({left:Math.max(0,x(km)-v.clientWidth/2),behavior:instant?"auto":"smooth"});}
-  function setZoom(next,km=center()){state.zoom=Math.max(fitZoom(),Math.min(600,next));renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);save();});}
-  function fitAll(){setZoom(fitZoom(),TOTAL/2);}
+  function routeRatio(){if(!routeViewport.clientHeight)return state.routeYRatio;const max=routeViewport.scrollHeight-routeViewport.clientHeight;return max>0?routeViewport.scrollTop/max:.5;}
+  function updateNavigator(km=center()){const value=Math.max(0,Math.min(TOTAL,km));positionSlider.value=value.toFixed(2);positionOutput.value=kmText(value);positionOutput.textContent=kmText(value);}
+  function save(){state.routeYRatio=routeRatio();localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers}));}
+  function scrollCenter(km,instant=false){const v=viewport();v.scrollTo({left:Math.max(0,x(km)-v.clientWidth/2),behavior:instant?"auto":"smooth"});updateNavigator(km);}
+  function restoreRouteY(ratio=state.routeYRatio){const max=routeViewport.scrollHeight-routeViewport.clientHeight;routeViewport.scrollTop=Math.max(0,Math.min(max,max*ratio));}
+  function setZoom(next,km=center()){const yRatio=routeRatio();state.zoom=Math.max(fitZoom(),Math.min(600,next));renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);save();});}
+  function fitAll(){state.routeYRatio=.5;setZoom(fitZoom(),TOTAL/2);requestAnimationFrame(()=>requestAnimationFrame(()=>{restoreRouteY(.5);save();}));}
   function showItem(target){const g=target.closest("[data-name]");if(!g)return;state.selected={km:Number(g.dataset.km)};$("#infoName").textContent=g.dataset.name;$("#infoKm").textContent=kmText(g.dataset.km);$("#infoType").textContent=g.dataset.type+(g.dataset.detail?`　${g.dataset.detail}`:"");$("#infoRelation").textContent=g.dataset.relation||"位置を表示しています";$("#infoBar").classList.add("expanded");$("#infoClose").classList.remove("hidden");renderRoute();}
   function closeInfo(){state.selected=null;$("#infoName").textContent=state.mode==="route"?"全線表示":"速度モード";$("#infoKm").textContent="0k000m — 56k100m";$("#infoType").textContent=state.mode==="route"?"駅・トンネルを表示中":"7000 速度カーブ";$("#infoRelation").textContent=state.mode==="route"?"設備をタップすると詳しく表示します":"赤：上り　青：下り";$("#infoBar").classList.remove("expanded");$("#infoClose").classList.add("hidden");renderRoute();}
   function buildSettings(){$("#layerSettings").innerHTML=layerInfo.map(([key,label,desc])=>`<div class="layer-row"><div class="layer-label"><strong>${label}</strong><span>${desc}</span></div><div class="tri-state" data-layer="${key}">${[["auto","自動"],["show","表示"],["hide","非表示"]].map(([value,text])=>`<button data-value="${value}" class="${(state.layers[key]||"auto")===value?"active":""}">${text}</button>`).join("")}</div></div>`).join("");$$('.tri-state button').forEach(b=>b.addEventListener("click",()=>{const h=b.closest('.tri-state');state.layers[h.dataset.layer]=b.dataset.value;h.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderRoute();save();}));}
   function openSettings(open){$("#settings").classList.toggle("open",open);$("#settings").setAttribute("aria-hidden",String(!open));$("#scrim").classList.toggle("hidden",!open);}
-  function setMode(mode){const old=state.zoom?center():state.centerKm;state.mode=mode;$$('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));$("#routeWorkspace").classList.toggle("hidden",mode!=="route");$("#speedWorkspace").classList.toggle("hidden",mode!=="speed");$("#modeTitle").textContent=mode==="route"?"路線図":"速度";closeInfo();requestAnimationFrame(()=>{renderRoute();renderSpeed();scrollCenter(old,true);save();});}
+  function setMode(mode){const old=state.zoom?center():state.centerKm;state.mode=mode;$$('.mode-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));$("#routeWorkspace").classList.toggle("hidden",mode!=="route");$("#speedWorkspace").classList.toggle("hidden",mode!=="speed");$("#modeTitle").textContent=mode==="route"?"路線図":"速度";closeInfo();requestAnimationFrame(()=>{renderRoute();renderSpeed();scrollCenter(old,true);restoreRouteY();save();});}
   function toast(message){const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),2200);}
   async function toggleOrientation(){if(state.fallbackLandscape){document.body.classList.remove("fallback-landscape");state.fallbackLandscape=false;toast("通常表示に戻しました");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);return;}if(state.orientationLocked){try{screen.orientation?.unlock();if(document.fullscreenElement)await document.exitFullscreen();}catch(_){}state.orientationLocked=false;toast("画面方向の固定を解除しました");return;}try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(!screen.orientation?.lock)throw new Error("unsupported");await screen.orientation.lock("landscape");state.orientationLocked=true;toast("横画面にしました");}catch(_){if(matchMedia("(pointer: coarse)").matches){state.centerKm=center();document.body.classList.add("fallback-landscape");state.fallbackLandscape=true;toast("端末を横向きにしてください");setTimeout(()=>setZoom(state.zoom,state.centerKm),120);}else toast("PCではウィンドウを横に広げてください");}}
 
   function gestures(v){
     const pointers=new Map();let gesture=null;
     const values=()=>[...pointers.values()];
-    const beginPan=point=>{gesture={kind:"pan",startX:point.x,scrollLeft:v.scrollLeft};};
-    const beginPinch=()=>{const [a,b]=values(),rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,distance=Math.hypot(a.x-b.x,a.y-b.y);gesture={kind:"pinch",distance:Math.max(1,distance),zoom:state.zoom,km:(v.scrollLeft+midX-PAD)/state.zoom};};
+    const beginPan=point=>{gesture={kind:"pan",startX:point.x,startY:point.y,scrollLeft:v.scrollLeft,scrollTop:v.scrollTop};};
+    const beginPinch=()=>{const [a,b]=values(),rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top,distance=Math.hypot(a.x-b.x,a.y-b.y);gesture={kind:"pinch",distance:Math.max(1,distance),zoom:state.zoom,km:(v.scrollLeft+midX-PAD)/state.zoom,contentY:v.scrollTop+midY};};
     v.addEventListener("pointerdown",e=>{v.closest('.workspace').classList.add('used');v.setPointerCapture?.(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1)beginPan(values()[0]);else if(pointers.size===2)beginPinch();});
-    v.addEventListener("pointermove",e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size>=2){if(gesture?.kind!=="pinch")beginPinch();const [a,b]=values(),distance=Math.hypot(a.x-b.x,a.y-b.y),next=Math.max(fitZoom(),Math.min(600,gesture.zoom*distance/gesture.distance));state.zoom=next;renderRoute();renderSpeed();const rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left;v.scrollLeft=Math.max(0,PAD+gesture.km*state.zoom-midX);}else if(pointers.size===1){const point=values()[0];if(gesture?.kind!=="pan")beginPan(point);v.scrollLeft=Math.max(0,gesture.scrollLeft-(point.x-gesture.startX));}});
+    v.addEventListener("pointermove",e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size>=2){if(gesture?.kind!=="pinch")beginPinch();const [a,b]=values(),distance=Math.hypot(a.x-b.x,a.y-b.y),next=Math.max(fitZoom(),Math.min(600,gesture.zoom*distance/gesture.distance));state.zoom=next;renderRoute();renderSpeed();const rect=v.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top;v.scrollLeft=Math.max(0,PAD+gesture.km*state.zoom-midX);if(v===routeViewport)v.scrollTop=Math.max(0,gesture.contentY-midY);updateNavigator();}else if(pointers.size===1){const point=values()[0];if(gesture?.kind!=="pan")beginPan(point);v.scrollLeft=Math.max(0,gesture.scrollLeft-(point.x-gesture.startX));v.scrollTop=Math.max(0,gesture.scrollTop-(point.y-gesture.startY));updateNavigator();}});
     const end=e=>{pointers.delete(e.pointerId);if(pointers.size===1)beginPan(values()[0]);else if(pointers.size===0){gesture=null;save();}};
     v.addEventListener("pointerup",end);v.addEventListener("pointercancel",end);v.addEventListener("lostpointercapture",e=>{if(pointers.has(e.pointerId))end(e);});
-    v.addEventListener("scroll",()=>{clearTimeout(v.saveTimer);v.saveTimer=setTimeout(save,160);},{passive:true});
+    v.addEventListener("scroll",()=>{if(v===viewport())updateNavigator();clearTimeout(v.saveTimer);v.saveTimer=setTimeout(save,160);},{passive:true});
     v.addEventListener("wheel",e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(state.zoom*(e.deltaY>0?.88:1.14),center());},{passive:false});
   }
 
@@ -105,11 +112,12 @@
   $("#menuBtn").addEventListener("click",()=>openSettings(true));$("#menuClose").addEventListener("click",()=>openSettings(false));$("#scrim").addEventListener("click",()=>openSettings(false));
   $("#resetLayers").addEventListener("click",()=>{state.layers=Object.fromEntries(layerInfo.map(([key])=>[key,"auto"]));buildSettings();renderRoute();save();toast("すべて自動に戻しました");});
   $("#fitBtn").addEventListener("click",fitAll);$("#zoomInBtn").addEventListener("click",()=>setZoom(state.zoom*1.55));$("#zoomOutBtn").addEventListener("click",()=>setZoom(state.zoom/1.55));$("#orientationBtn").addEventListener("click",toggleOrientation);$("#infoClose").addEventListener("click",closeInfo);
+  positionSlider.addEventListener("input",()=>scrollCenter(Number(positionSlider.value),true));positionSlider.addEventListener("change",save);
   $$(".mode-tab").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));$$('[data-speed]').forEach(i=>i.addEventListener("change",renderSpeed));
   routeSvg.addEventListener("click",e=>showItem(e.target));routeSvg.addEventListener("keydown",e=>{if(["Enter"," "].includes(e.key))showItem(e.target);});
   document.addEventListener("contextmenu",e=>{if(!e.target.matches("input,textarea"))e.preventDefault();});document.addEventListener("dragstart",e=>e.preventDefault());
   gestures(routeViewport);gestures(speedViewport);
-  window.addEventListener("resize",()=>{const km=center();renderRoute();renderSpeed();requestAnimationFrame(()=>scrollCenter(km,true));});
+  window.addEventListener("resize",()=>{const km=center(),yRatio=routeRatio();renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);});});
   if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));
-  requestAnimationFrame(()=>{state.zoom=state.zoom===null?fitZoom():Math.max(fitZoom(),Math.min(600,state.zoom));renderRoute();renderSpeed();setMode(state.mode);requestAnimationFrame(()=>scrollCenter(saved?state.centerKm:TOTAL/2,true));});
+  requestAnimationFrame(()=>{state.zoom=state.zoom===null?fitZoom():Math.max(fitZoom(),Math.min(600,state.zoom));renderRoute();renderSpeed();setMode(state.mode);requestAnimationFrame(()=>{scrollCenter(saved?state.centerKm:TOTAL/2,true);restoreRouteY();});});
 })();
