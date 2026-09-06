@@ -18,7 +18,7 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><strong>智頭線</strong><span id="modeTitle">路線図</span></div>
       <nav class="mode-tabs" aria-label="表示モード">
         <button class="mode-tab active" data-mode="route">路線</button>
-        <button class="mode-tab" data-mode="speed">速度</button>
+        <button class="mode-tab" data-mode="speed">＋速度</button>
       </nav>
       <div class="top-actions">
         <button id="orientationBtn" class="icon-button" aria-label="縦横を切り替える" title="縦横切替">↻</button>
@@ -34,6 +34,12 @@
             <svg id="railSvg" role="img" aria-label="智頭線の連続路線図"></svg>
           </div>
         </div>
+        <div id="speedOverlayTools" class="speed-overlay-tools hidden" aria-label="速度カーブ選択">
+          <strong>7000</strong>
+          <label class="line-toggle up"><input type="checkbox" data-speed="up" checked><span>上り</span></label>
+          <label class="line-toggle down"><input type="checkbox" data-speed="down"><span>下り</span></label>
+          <small>0–140 km/h</small>
+        </div>
         <div class="zoom-buttons" aria-label="拡大縮小">
           <button id="zoomInBtn" aria-label="拡大">＋</button>
           <button id="zoomOutBtn" aria-label="縮小">−</button>
@@ -45,7 +51,7 @@
         <div class="speed-tools">
           <strong>速度カーブ</strong>
           <div class="train-grid" aria-label="列車と方向">
-            <div class="train-row"><span>7000</span><label class="line-toggle up"><input type="checkbox" data-speed="up" checked><span>上り</span></label><label class="line-toggle down"><input type="checkbox" data-speed="down"><span>下り</span></label></div>
+            <div class="train-row"><span>7000</span></div>
             <div class="train-row unavailable"><span>列車②</span><button disabled>データ未登録</button></div>
             <div class="train-row unavailable"><span>列車③</span><button disabled>データ未登録</button></div>
           </div>
