@@ -14,6 +14,7 @@ button{cursor:pointer}
 .hidden{display:none!important}
 .rail-viewport{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;touch-action:none;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#8f8a7d var(--paper-deep)}
 .rail-viewport svg{display:block;height:100%;min-height:320px;background:transparent}
+.route-canvas{position:relative;height:150%;min-height:480px}.route-canvas #railSvg{position:absolute;left:0;min-height:0}
 .status-pills{position:absolute;top:8px;left:8px;z-index:3;display:flex;gap:5px;pointer-events:none}.status-pills span,.status-button{min-height:29px;padding:5px 8px;border:1px solid #c9c3b5;border-radius:999px;background:#f8f5eacc;color:#59605e;font-size:11px;box-shadow:0 2px 5px #554e3d16}.status-button{pointer-events:auto;font-weight:800}
 .gesture-hint{position:absolute;z-index:3;bottom:10px;left:50%;transform:translateX(-50%);padding:6px 11px;border-radius:999px;background:#173b4cda;color:#fff;font-size:11px;white-space:nowrap;pointer-events:none;transition:opacity .35s}.workspace.used .gesture-hint{opacity:0}
 .zoom-buttons{position:absolute;z-index:4;right:10px;bottom:12px;display:grid;gap:6px}.zoom-buttons button{width:46px;height:46px;border:1px solid #b9b2a3;border-radius:50%;background:#faf8f0e8;color:#173b4c;font-size:25px;font-weight:700;box-shadow:0 3px 10px #3b332522}.zoom-buttons button:active{transform:scale(.95);background:#e8e2d5}

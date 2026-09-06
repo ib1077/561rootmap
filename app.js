@@ -7,11 +7,13 @@
   const $$ = selector => [...document.querySelectorAll(selector)];
   const routeViewport = $("#railViewport");
   const speedViewport = $("#speedViewport");
+  const routeCanvas = $("#routeCanvas");
   const routeSvg = $("#railSvg");
   const speedSvg = $("#speedSvg");
   const positionSlider = $("#positionSlider");
   const positionOutput = $("#positionOutput");
-  const saved = JSON.parse(localStorage.getItem("chizu-line-v2-view") || "null");
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("chizu-line-v2-view") || "null"); } catch (_) { saved = null; }
   const layerInfo = [
     ["stations", "駅", "全体から表示"], ["tunnels", "トンネル", "全体から表示"],
     ["gradient", "勾配", "少し拡大すると表示"], ["curves", "曲線", "少し拡大すると表示"],
@@ -38,8 +40,7 @@
     return D.gradient.at(-1).y;
   }
   function x(km){return PAD+km*state.zoom;}
-  function routeContentHeight(){return Math.max(480,Math.round((routeViewport.clientHeight||400)*1.5));}
-  function routeY(value,height){const visible=Math.max(260,routeViewport.clientHeight||height/1.5),span=Math.min(height-120,visible*.78),top=(height-span)/2;return top+(maxY-value)/(maxY-minY||1)*span;}
+  function routeY(value,height){return 58+(maxY-value)/(maxY-minY||1)*Math.max(150,height-126);}
   function routePath(points,height){return points.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${routeY(p.y,height).toFixed(1)}`).join(" ");}
   function pointsBetween(start,end){return [{km:start,y:interpolateY(start)},...D.gradient.filter(p=>p.km>start&&p.km<end),{km:end,y:interpolateY(end)}];}
   function autoVisible(layer){if(["stations","tunnels"].includes(layer))return true;if(["gradient","curves"].includes(layer))return state.zoom>=24;if(["signals","points","exits"].includes(layer))return state.zoom>=68;if(layer==="balises")return state.zoom>=110;return false;}
@@ -47,8 +48,9 @@
   function attrs(type,name,km,detail="",relation=""){return `class="clickable" tabindex="0" role="button" data-type="${escapeHtml(type)}" data-name="${escapeHtml(name)}" data-km="${km}" data-detail="${escapeHtml(detail)}" data-relation="${escapeHtml(relation)}"`;}
 
   function renderRoute(){
-    const height=routeContentHeight(),width=Math.max(routeViewport.clientWidth,PAD*2+TOTAL*state.zoom);
-    routeSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);routeSvg.setAttribute("width",width);routeSvg.setAttribute("height",height);routeSvg.style.height=`${height}px`;
+    const visibleHeight=Math.max(260,routeViewport.clientHeight||400),height=visibleHeight,width=Math.max(routeViewport.clientWidth,PAD*2+TOTAL*state.zoom),canvasHeight=Math.max(480,Math.round(visibleHeight*1.5));
+    routeCanvas.style.width=`${width}px`;routeCanvas.style.height=`${canvasHeight}px`;
+    routeSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);routeSvg.setAttribute("width",width);routeSvg.setAttribute("height",height);routeSvg.style.width=`${width}px`;routeSvg.style.height=`${height}px`;routeSvg.style.top=`${Math.max(0,(canvasHeight-height)/2)}px`;
     let out=`<rect width="${width}" height="${height}" fill="#f2efe4" opacity=".96"/>`;
     const step=state.zoom<16?5:state.zoom<55?1:.1;
     for(let km=0;km<=TOTAL+.0001;km+=step){const n=Math.round(km*10)/10,major=Math.abs(n%5)<.001;out+=`<line class="rail-grid${major?" major":""}" x1="${x(n)}" y1="22" x2="${x(n)}" y2="${height-28}"/>`;if(major||state.zoom>=42)out+=`<text class="km-label" x="${x(n)+3}" y="18">${state.zoom>=85?kmText(n):`${Number(n.toFixed(1))}k`}</text>`;}
@@ -82,7 +84,7 @@
   function fitZoom(){return Math.max(4,((viewport().clientWidth||innerWidth)-PAD*2)/TOTAL);}
   function routeRatio(){if(!routeViewport.clientHeight)return state.routeYRatio;const max=routeViewport.scrollHeight-routeViewport.clientHeight;return max>0?routeViewport.scrollTop/max:.5;}
   function updateNavigator(km=center()){const value=Math.max(0,Math.min(TOTAL,km));positionSlider.value=value.toFixed(2);positionOutput.value=kmText(value);positionOutput.textContent=kmText(value);}
-  function save(){state.routeYRatio=routeRatio();localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers}));}
+  function save(){state.routeYRatio=routeRatio();try{localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers}));}catch(_){}}
   function scrollCenter(km,instant=false){const v=viewport();v.scrollTo({left:Math.max(0,x(km)-v.clientWidth/2),behavior:instant?"auto":"smooth"});updateNavigator(km);}
   function restoreRouteY(ratio=state.routeYRatio){const max=routeViewport.scrollHeight-routeViewport.clientHeight;routeViewport.scrollTop=Math.max(0,Math.min(max,max*ratio));}
   function setZoom(next,km=center()){const yRatio=routeRatio();state.zoom=Math.max(fitZoom(),Math.min(600,next));renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);save();});}
