@@ -166,14 +166,14 @@
       </div>
       <button id="useTimeRangeBtn" class="use-time-range">時間計算で選んだ区間を使う</button>
     </div>
-    <label class="print-option"><input id="printTimeNote" type="checkbox"><span><strong>速度区間・時間を欄外に付ける</strong><small>7000の上り・下り所要時間を小さく表示</small></span></label>
+    <button id="printTimeToggle" class="print-time-toggle" type="button" aria-pressed="false" disabled><span>◷</span><strong>計算値を表示</strong><small>速度表示時だけ、6段目右側の空白へ表示</small></button>
     <div class="print-rule"><strong>表示内容</strong><span>駅・トンネル・勾配・曲線・信号・地上子・速度は、現在の画面で表示されている項目を引き継ぎます。</span></div>
     <button id="startPrintBtn" class="start-print-button">印刷プレビューへ</button>
     <p class="print-help">印刷画面でプリンターを選ぶと紙へ、「PDFに保存」を選ぶとPDFになります。</p>
   </section>
 
   <section id="printSheet" class="print-sheet" aria-hidden="true">
-    <header class="print-sheet-head"><div><strong>智頭線　路線図</strong><span id="printSheetSubtitle">全線　0k000m～56k100m</span></div><small id="printLayerSummary"></small></header>
+    <header class="print-sheet-head"><strong>路線図</strong><span id="printSpeedTitle" class="hidden"></span></header>
     <div id="printRows" class="print-rows"></div>
     <footer id="printSheetFooter" class="print-sheet-footer hidden"></footer>
   </section>
