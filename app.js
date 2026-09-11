@@ -1,6 +1,10 @@
 (() => {
   "use strict";
   const D = window.RAIL_DATA;
+  const SPEED_PROFILES = {
+    "7000": {id:"7000",label:"7000",kind:"express",source:"route-data.js",points:D.speeds},
+    ...(window.TRAIN_SPEED_DATA || {})
+  };
   const ASSETS = window.ASSET_ROWS || [];
   const LIST_SIGNALS = ASSETS.filter(row => row.category === "信号機");
   for (const signal of D.signals) {
@@ -35,6 +39,7 @@
     zoom: Number.isFinite(saved?.zoom) ? saved.zoom : null,
     centerKm: Number.isFinite(saved?.centerKm) ? saved.centerKm : TOTAL / 2,
     layers: saved?.layers || Object.fromEntries(layerInfo.map(([key]) => [key, "auto"])),
+    selectedTrain: SPEED_PROFILES[saved?.selectedTrain] ? saved.selectedTrain : "7000",
     speedDirections: Array.isArray(saved?.speedDirections) ? saved.speedDirections : ["up"],
     selectedAssetId: Number.isFinite(saved?.selectedAssetId) ? saved.selectedAssetId : null,
     assetStripOpen: saved?.assetStripOpen === true,
@@ -52,6 +57,10 @@
   const assetKmText = km => {const m=Math.round(Number(km)*1000),a=Math.abs(m);return `${m<0?"−":""}${Math.floor(a/1000)}k${String(a%1000).padStart(3,"0")}m`;};
   const curveSpans = (() => { const spans=[]; let active=null; for(const item of D.curves){ if(["BC","BTC","BIT"].includes(item.mark)) active={start:item.km,radius:item.radius}; if(active&&["EC","ETC","EIT"].includes(item.mark)){spans.push({...active,end:item.km});active=null;} } return spans.filter(item=>item.end>item.start); })();
   const expressStops = EXPRESS_STOP_NAMES.map(name=>D.stations.find(station=>station.name===name)).filter(Boolean);
+  const speedProfile = () => SPEED_PROFILES[state.selectedTrain] || SPEED_PROFILES["7000"];
+  const speedPoints = () => speedProfile().points;
+  const trainLabel = () => speedProfile().label;
+  const localStops = () => (speedProfile().stops || D.stations).map(stop=>{const station=D.stations.find(item=>Math.abs(item.km-stop.km)<.02);return {name:station?.name||stop.name,km:stop.km};});
 
   function interpolateY(km) {
     if (km <= D.gradient[0].km) return D.gradient[0].y;
@@ -60,7 +69,7 @@
   }
   function x(km){return PAD+km*state.zoom;}
   function routeY(value,height){return 58+(maxY-value)/(maxY-minY||1)*Math.max(150,height-126);}
-  function speedY(value,height){return 30+(140-Math.max(0,Math.min(140,value)))/140*Math.max(150,height-76);}
+  function speedY(value,height){return 30+(150-Math.max(0,Math.min(150,value)))/150*Math.max(150,height-76);}
   function routePath(points,height){return points.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${routeY(p.y,height).toFixed(1)}`).join(" ");}
   function pointsBetween(start,end){return [{km:start,y:interpolateY(start)},...D.gradient.filter(p=>p.km>start&&p.km<end),{km:end,y:interpolateY(end)}];}
   function autoVisible(layer){if(["stations","tunnels"].includes(layer))return true;if(["gradient","curves"].includes(layer))return state.zoom>=24;if(["signals","points","exits"].includes(layer))return state.zoom>=68;if(layer==="balises")return state.zoom>=110;return false;}
@@ -93,7 +102,7 @@
     if(state.mode==="speed")for(const v of [40,80,120]){const yy=speedY(v,height);out+=`<line class="speed-overlay-guide" x1="${PAD}" y1="${yy}" x2="${width-PAD}" y2="${yy}"/>`;for(let km=0;km<=TOTAL;km+=10)out+=`<text class="speed-overlay-label" x="${x(km)+3}" y="${yy-3}">${v}</text>`;}
     if(visible("tunnels"))for(const t of D.tunnels){const start=Math.max(0,t.start),end=Math.min(TOTAL,t.end);if(end<=0||start>=TOTAL)continue;out+=`<g ${attrs("トンネル",`${t.name}トンネル`,start,`${kmText(start)} — ${kmText(end)}`,`延長 ${Math.round((end-start)*1000)}m`)}><path class="tunnel-line" d="${routePath(pointsBetween(start,end),height)}"/>`;const pixels=(end-start)*state.zoom;if(state.zoom>=19||pixels>=31){const mid=(start+end)/2;out+=`<text class="tunnel-name" x="${x(mid)}" y="${routeY(interpolateY(mid),height)-9}" text-anchor="middle">${escapeHtml(t.name)}</text>`;}out+=`</g>`;}
     out+=`<path class="route-line" d="${routePath(D.gradient.filter(p=>p.km>=0&&p.km<=TOTAL),height)}"/>`;
-    if(state.mode==="speed"){const selected=new Set(state.speedDirections);for(const dir of ["up","down"])if(selected.has(dir)){const pts=D.speeds.filter(p=>p[dir]>0),path=pts.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${speedY(p[dir],height).toFixed(1)}`).join(" ");out+=`<path class="speed-line-halo" d="${path}"/><path class="speed-line-${dir}" d="${path}"/>`;if(state.zoom>=70)for(const p of pts.filter(p=>Math.abs((p.km/2)-Math.round(p.km/2))<.001)){const yy=speedY(p[dir],height),dy=dir==="up"?-7:14;out+=`<text class="speed-value speed-value-${dir}" x="${x(p.km)+4}" y="${yy+dy}">${p[dir]}</text>`;}}}
+    if(state.mode==="speed"){const selected=new Set(state.speedDirections);for(const dir of ["up","down"])if(selected.has(dir)){const pts=speedPoints(),path=pts.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${speedY(p[dir],height).toFixed(1)}`).join(" ");out+=`<path class="speed-line-halo" d="${path}"/><path class="speed-line-${dir}" d="${path}"/>`;if(state.zoom>=70)for(const p of pts.filter(p=>Math.abs((p.km/2)-Math.round(p.km/2))<.001)){const yy=speedY(p[dir],height),dy=dir==="up"?-7:14;out+=`<text class="speed-value speed-value-${dir}" x="${x(p.km)+4}" y="${yy+dy}">${p[dir]}</text>`;}}}
     if(visible("gradient"))for(const p of D.gradient.filter(p=>p.km>=0&&p.km<=TOTAL)){const yy=routeY(p.y,height),label=`${p.permille>0?"+":""}${p.permille}‰`;out+=`<g ${attrs("勾配",label,p.km,`${kmText(p.km)}から`,"勾配変化点")}><circle cx="${x(p.km)}" cy="${yy}" r="3.4" fill="#315666"/><text class="gradient-label" x="${x(p.km)+5}" y="${yy-7}">${label}</text></g>`;}
     if(visible("curves")){const baseY=height-35;for(const c of curveSpans){out+=`<g ${attrs("曲線",c.radius?`R${c.radius}`:"曲線区間",c.start,`${kmText(c.start)} — ${kmText(c.end)}`,`延長 ${Math.round((c.end-c.start)*1000)}m`)}><path class="curve-mark" d="M${x(c.start)} ${baseY-8}V${baseY}H${x(c.end)}V${baseY-8}"/>`;if(state.zoom>=38&&c.radius)out+=`<text class="curve-label" x="${x((c.start+c.end)/2)}" y="${baseY-4}" text-anchor="middle">R${c.radius}</text>`;out+=`</g>`;}}
     if(visible("stations"))for(const s of D.stations){const yy=routeY(interpolateY(s.km),height);out+=`<g ${attrs("駅",`${s.name}駅`,s.km,kmText(s.km),"")}><line class="station-guide" x1="${x(s.km)}" y1="32" x2="${x(s.km)}" y2="${yy+18}"/><circle class="station-dot" cx="${x(s.km)}" cy="${yy}" r="5"/><text class="station-name" x="${x(s.km)+5}" y="45">${escapeHtml(s.name)}</text></g>`;}
@@ -106,13 +115,13 @@
   }
 
   function renderSpeed(){
-    const height=Math.max(300,speedViewport.clientHeight||430),width=Math.max(speedViewport.clientWidth,PAD*2+TOTAL*state.zoom),sy=v=>28+(140-v)/140*(height-72);
+    const height=Math.max(300,speedViewport.clientHeight||430),width=Math.max(speedViewport.clientWidth,PAD*2+TOTAL*state.zoom),sy=v=>28+(150-v)/150*(height-72);
     speedSvg.setAttribute("viewBox",`0 0 ${width} ${height}`);speedSvg.setAttribute("width",width);speedSvg.setAttribute("height",height);
     let out=`<rect width="${width}" height="${height}" fill="#fcfcfa"/>`;
-    for(const v of [0,20,40,60,80,100,120,140])out+=`<line class="speed-grid-line${v%40?" minor":""}" x1="${PAD}" y1="${sy(v)}" x2="${width-PAD}" y2="${sy(v)}"/><text class="km-label" x="4" y="${sy(v)-3}">${v}</text>`;
+    for(const v of [0,25,50,75,100,125,150])out+=`<line class="speed-grid-line${v%50?" minor":""}" x1="${PAD}" y1="${sy(v)}" x2="${width-PAD}" y2="${sy(v)}"/><text class="km-label" x="4" y="${sy(v)-3}">${v}</text>`;
     for(let km=0;km<=TOTAL;km+=state.zoom<18?5:1)out+=`<line class="speed-grid-line minor" x1="${x(km)}" y1="20" x2="${x(km)}" y2="${height-32}"/><text class="km-label" x="${x(km)+3}" y="${height-12}">${km}k</text>`;
     for(const s of D.stations)out+=`<line x1="${x(s.km)}" y1="21" x2="${x(s.km)}" y2="${height-32}" stroke="#929083"/><text class="station-name" x="${x(s.km)+4}" y="42">${escapeHtml(s.name)}</text>`;
-    const selected=new Set($$("[data-speed]:checked").map(i=>i.dataset.speed));for(const dir of ["up","down"])if(selected.has(dir)){const pts=D.speeds.filter(p=>p[dir]>0),path=pts.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${sy(p[dir]).toFixed(1)}`).join(" ");out+=`<path class="speed-line-${dir}" d="${path}"/>`;}
+    const selected=new Set($$("[data-speed]:checked").map(i=>i.dataset.speed));for(const dir of ["up","down"])if(selected.has(dir)){const pts=speedPoints(),path=pts.map((p,i)=>`${i?"L":"M"}${x(p.km).toFixed(1)} ${sy(p[dir]).toFixed(1)}`).join(" ");out+=`<path class="speed-line-${dir}" d="${path}"/>`;}
     speedSvg.innerHTML=out;
   }
 
@@ -135,7 +144,7 @@
   function setAssetStripOpen(open,persist=true){state.assetStripOpen=Boolean(open);if(state.assetStripOpen)setTimePanel(false);document.body.classList.toggle("asset-strip-open",state.assetStripOpen);const button=$("#assetStripToggle");button.classList.toggle("active",state.assetStripOpen);button.setAttribute("aria-expanded",String(state.assetStripOpen));$("#assetDockState").textContent=state.assetStripOpen?"表示中":"非表示";if(state.assetStripOpen)setTimeout(renderAssetStrip,190);else stripHits=[];if(persist)save();}
 
   function speedAt(km,direction){
-    const value=Math.max(0,Math.min(TOTAL,Number(km)||0)),points=D.speeds;
+    const value=Math.max(0,Math.min(TOTAL,Number(km)||0)),points=speedPoints();
     if(value<=points[0].km)return Number(points[0][direction])||0;
     for(let i=1;i<points.length;i+=1)if(value<=points[i].km){const a=points[i-1],b=points[i],ratio=(value-a.km)/(b.km-a.km||1);return (Number(a[direction])||0)+((Number(b[direction])||0)-(Number(a[direction])||0))*ratio;}
     return Number(points.at(-1)[direction])||0;
@@ -143,7 +152,7 @@
   function travelTime(start,end,direction){
     const low=Math.min(start,end),high=Math.max(start,end),distance=high-low;
     if(distance<=0)return {seconds:0,average:0};
-    const points=[low,...D.speeds.map(point=>point.km).filter(km=>km>low&&km<high),high];let seconds=0;
+    const points=[low,...speedPoints().map(point=>point.km).filter(km=>km>low&&km<high),high];let seconds=0;
     for(let i=1;i<points.length;i+=1){const a=points[i-1],b=points[i],averageSpeed=(speedAt(a,direction)+speedAt(b,direction))/2;if(averageSpeed<=0)return null;seconds+=(b-a)*3600/averageSpeed;}
     return {seconds,average:distance*3600/seconds};
   }
@@ -152,6 +161,7 @@
   function updateTimeCalculation(start=state.timeStart,end=state.timeEnd,label=null){
     state.timeStart=Math.max(0,Math.min(TOTAL,Number(start)||0));state.timeEnd=Math.max(0,Math.min(TOTAL,Number(end)||0));
     const low=Math.min(state.timeStart,state.timeEnd),high=Math.max(state.timeStart,state.timeEnd),rangeLabel=label||`${kmText(state.timeStart)} ― ${kmText(state.timeEnd)}`;
+    $("#upTimeTrain").textContent=`${trainLabel()} 上り`;$("#downTimeTrain").textContent=`${trainLabel()} 下り`;
     $("#timeRangeLabel").textContent=`${rangeLabel}　${kmText(state.timeStart)} ― ${kmText(state.timeEnd)}`;$("#timeDistanceResult").textContent=`${(high-low).toFixed(3)} km`;
     setTimeResult("#upTimeResult",travelTime(low,high,"up"));setTimeResult("#downTimeResult",travelTime(low,high,"down"));
     $("#timeDockState").textContent=state.timeMethod==="all"?"全線を計算":rangeLabel;renderRoute();save();
@@ -169,8 +179,11 @@
   function buildTimeControls(){
     const options=D.stations.map((station,index)=>`<option value="${index}">${station.name}　${kmText(station.km)}</option>`).join("");$("#startStation").innerHTML=options;$("#endStation").innerHTML=options;$("#startStation").value="0";$("#endStation").value=String(D.stations.length-1);
     $("#expressPresets").innerHTML=expressStops.slice(0,-1).map((station,index)=>`<button data-express-index="${index}">${station.name} ― ${expressStops[index+1].name}</button>`).join("");
+    $("#trainSelect").value=state.selectedTrain;
     setTimeMethod(state.timeMethod,false);updateTimeCalculation(state.timeStart,state.timeEnd,state.timeMethod==="all"?"全線":null);
   }
+
+  function selectTrain(id){if(!SPEED_PROFILES[id])return;state.selectedTrain=id;$("#trainSelect").value=id;updateTimeCalculation(state.timeStart,state.timeEnd);updatePrintCalculationToggle();renderRoute();renderSpeed();save();toast(`${trainLabel()}の通常速度を表示します`);}
 
   let printLayout="full",printRangeMode="station",printShowCalculation=false;
   function printGradientPoints(start,end){return [{km:start,y:interpolateY(start)},...D.gradient.filter(point=>point.km>start&&point.km<end),{km:end,y:interpolateY(end)}];}
@@ -182,7 +195,7 @@
     for(let km=first;km<=end+.00001;km+=gridStep){const value=Math.round(km*1000)/1000,major=Math.abs(value-Math.round(value))<.0001,endpoint=Math.abs(value-start)<.0001||Math.abs(value-end)<.0001;out+=`<line x1="${px(value)}" y1="8" x2="${px(value)}" y2="${height-8}" stroke="${major?"#b7b0a3":"#ded9ce"}" stroke-width="${major?1:.6}"/>${endpoint?"":`<text x="${px(value)+2}" y="10" fill="#646965" font-size="${large?9:7}">${range<=2?kmText(value):`${Number(value.toFixed(1))}k`}</text>`}`;}
     if(visible("tunnels"))for(const tunnel of D.tunnels.filter(item=>item.end>=start&&item.start<=end)){const a=Math.max(start,tunnel.start),b=Math.min(end,tunnel.end),points=printGradientPoints(a,b),mid=(a+b)/2;out+=`<path d="${routePathLocal(points)}" fill="none" stroke="#303638" stroke-width="${large?10:7}" opacity=".72" stroke-linecap="round"/><text x="${px(mid)}" y="${py(interpolateY(mid))-7}" text-anchor="middle" fill="#3f4748" font-size="${large?10:7}" font-weight="700">${escapeHtml(tunnel.name)}</text>`;}
     out+=`<path d="${routePathLocal(gradient)}" fill="none" stroke="#244b59" stroke-width="${large?4:3}" stroke-linejoin="round" stroke-linecap="round"/>`;
-    if(state.mode==="speed")for(const direction of state.speedDirections){const points=[{km:start,value:speedAt(start,direction)},...D.speeds.filter(point=>point.km>start&&point.km<end).map(point=>({km:point.km,value:point[direction]})),{km:end,value:speedAt(end,direction)}],path=points.map((point,index)=>`${index?"L":"M"}${px(point.km).toFixed(1)} ${speedPy(point.value).toFixed(1)}`).join(" "),color=direction==="up"?"#c13c38":"#1d72b8";out+=`<path d="${path}" fill="none" stroke="#fff" stroke-width="6" opacity=".8"/><path d="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`;}
+    if(state.mode==="speed")for(const direction of state.speedDirections){const points=[{km:start,value:speedAt(start,direction)},...speedPoints().filter(point=>point.km>start&&point.km<end).map(point=>({km:point.km,value:point[direction]})),{km:end,value:speedAt(end,direction)}],path=points.map((point,index)=>`${index?"L":"M"}${px(point.km).toFixed(1)} ${speedPy(point.value).toFixed(1)}`).join(" "),color=direction==="up"?"#c13c38":"#1d72b8";out+=`<path d="${path}" fill="none" stroke="#fff" stroke-width="6" opacity=".8"/><path d="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`;}
     if(visible("gradient"))for(const point of D.gradient.filter(item=>item.km>=start&&item.km<=end)){const label=`${point.permille>0?"+":""}${point.permille}‰`;out+=`<circle cx="${px(point.km)}" cy="${py(point.y)}" r="2.4" fill="#315666"/><text x="${px(point.km)+3}" y="${py(point.y)-4}" fill="#315666" font-size="${large?9:7}" font-weight="700">${label}</text>`;}
     if(visible("curves")){const base=height-13;for(const curve of curveSpans.filter(item=>item.end>=start&&item.start<=end)){const a=Math.max(start,curve.start),b=Math.min(end,curve.end);out+=`<path d="M${px(a)} ${base-6}V${base}H${px(b)}V${base-6}" fill="none" stroke="#a36b16" stroke-width="2"/>`;if(curve.radius&&(large||range<=12))out+=`<text x="${px((a+b)/2)}" y="${base-3}" text-anchor="middle" fill="#895a16" font-size="${large?9:7}" font-weight="700">R${curve.radius}</text>`;}}
     if(visible("stations")){const stations=D.stations.filter(item=>item.km>=start-.0001&&item.km<=end+.0001);stations.forEach((station,index)=>{const yy=py(interpolateY(station.km)),labelY=large?22+(index%2)*15:22;out+=`<line x1="${px(station.km)}" y1="${labelY+3}" x2="${px(station.km)}" y2="${yy+10}" stroke="#777b75" stroke-width=".8"/><circle cx="${px(station.km)}" cy="${yy}" r="${large?5:4}" fill="#fff" stroke="#173b4c" stroke-width="2"/><text x="${px(station.km)+4}" y="${labelY}" fill="#183641" font-size="${large?11:8}" font-weight="800">${escapeHtml(station.name)}</text>`;});}
@@ -190,12 +203,12 @@
     if(visible("balises")){for(const balise of D.poweredBalises.filter(item=>item.km>=start&&item.km<=end)){const lineY=py(interpolateY(balise.km)),offset=balise.direction==="上り"?(large?-42:-27):(large?42:27),yy=lineY+offset,color=balise.direction==="上り"?"#b73431":"#176aa1",size=large?4:3;out+=`<path d="M${px(balise.km)} ${yy-size}l${size} ${size} -${size} ${size} -${size} -${size}z" fill="${color}"/>`;if(large||state.zoom>=180||state.layers.balises==="show")out+=`<text x="${px(balise.km)+5}" y="${yy-4}" fill="${color}" font-size="${large?7:5.5}" font-weight="700">${escapeHtml(balise.code||"")}</text>`;}for(const balise of D.passiveBalises.filter(item=>item.km>=start&&item.km<=end)){const yy=py(interpolateY(balise.km))+(large?55:35);out+=`<rect x="${px(balise.km)-4}" y="${yy-2}" width="8" height="4" rx="1" fill="#414b4f"/>`;if(large||state.zoom>=180||state.layers.balises==="show")out+=`<text x="${px(balise.km)+5}" y="${yy+3}" fill="#414b4f" font-size="${large?7:5.5}">${escapeHtml(balise.code||"")}</text>`;}}
     if(visible("points"))for(const point of D.points.filter(item=>item.km>=start&&item.km<=end)){const yy=py(interpolateY(point.km));out+=`<path d="M${px(point.km)-4} ${yy+6}l4 -8 4 8z" fill="#6d5c8e"/>`;}
     if(visible("exits"))for(const exit of D.exits.filter(item=>item.km>=start&&item.km<=end)){const yy=py(interpolateY(exit.km));out+=`<rect x="${px(exit.km)-3}" y="${yy-3}" width="6" height="6" fill="#c38729"/>`;}
-    if(calculation){const boxX=Math.min(width-335,px(end)+18),boxY=34,boxW=300,boxH=height-60;out+=`<g class="print-calculation"><rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" fill="#fff" stroke="#89969a" stroke-width="1"/><text x="${boxX+12}" y="${boxY+18}" fill="#173b4c" font-size="10" font-weight="800">計算値　7000</text>`;calculation.rows.forEach((row,index)=>{const yy=boxY+39+index*24;out+=`<text x="${boxX+12}" y="${yy}" fill="#3f4f54" font-size="8" font-weight="700">${escapeHtml(row.label)}</text><text x="${boxX+boxW-12}" y="${yy}" text-anchor="end" fill="#173b4c" font-size="8.5" font-weight="800">${escapeHtml(row.value)}</text>`;});out+=`<text x="${boxX+12}" y="${boxY+boxH-9}" fill="#777f81" font-size="6.5">停車時間を含まない参考計算</text></g>`;}
+    if(calculation){const boxX=Math.min(width-335,px(end)+18),boxY=34,boxW=300,boxH=height-60,columns=calculation.rows.length>7?2:1,rowsPerColumn=Math.ceil(calculation.rows.length/columns),columnW=boxW/columns,rowStep=columns===1?24:(boxH-48)/rowsPerColumn;out+=`<g class="print-calculation"><rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" fill="#fff" stroke="#89969a" stroke-width="1"/><text x="${boxX+12}" y="${boxY+18}" fill="#173b4c" font-size="10" font-weight="800">計算値　${escapeHtml(calculation.train)}</text>`;calculation.rows.forEach((row,index)=>{const column=Math.floor(index/rowsPerColumn),line=index%rowsPerColumn,baseX=boxX+column*columnW,yy=boxY+38+line*rowStep;out+=`<text x="${baseX+8}" y="${yy}" fill="#3f4f54" font-size="${columns===1?8:5.8}" font-weight="700">${escapeHtml(row.label)}</text><text x="${baseX+columnW-8}" y="${yy}" text-anchor="end" fill="#173b4c" font-size="${columns===1?8.5:6.2}" font-weight="800">${escapeHtml(row.value)}</text>`;});out+=`<text x="${boxX+12}" y="${boxY+boxH-9}" fill="#777f81" font-size="6.5">停車時間を含まない参考計算</text></g>`;}
     return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${kmText(start)}から${kmText(end)}までの路線図">${out}</svg>`;
   }
   function printDirectionTitle(){return state.speedDirections.map(direction=>direction==="up"?"のぼり":"くだり").join("・");}
-  function updatePrintCalculationToggle(){const button=$("#printTimeToggle"),available=state.mode==="speed"&&state.speedDirections.length>0;if(!available)printShowCalculation=false;button.disabled=!available;button.setAttribute("aria-pressed",String(printShowCalculation));button.querySelector("strong").textContent=printShowCalculation?"計算値を表示中":"計算値を表示";button.querySelector("small").textContent=available?"6段目右側の空白へ参考時間を表示":"速度表示にすると使用できます";}
-  function printCalculationData(){const labels={up:"上",down:"下"};return {rows:expressStops.slice(0,-1).map((station,index)=>{const next=expressStops[index+1],value=state.speedDirections.map(direction=>{const result=travelTime(station.km,next.km,direction);return `${labels[direction]} ${result?formatTime(result.seconds):"--:--"}`;}).join("　");return {label:`${station.name} - ${next.name}`,value};})};}
+  function updatePrintCalculationToggle(){const button=$("#printTimeToggle"),available=state.mode==="speed"&&state.speedDirections.length>0;if(!available)printShowCalculation=false;button.disabled=!available;button.setAttribute("aria-pressed",String(printShowCalculation));button.querySelector("strong").textContent=printShowCalculation?"計算値を表示中":"計算値を表示";button.querySelector("small").textContent=available?(speedProfile().kind==="local"?"6段目右側へ全駅間の参考時間を表示":"6段目右側へ特急3区間の参考時間を表示"):"速度表示にすると使用できます";}
+  function printCalculationData(){const labels={up:"上",down:"下"},stops=speedProfile().kind==="local"?localStops():expressStops;return {train:trainLabel(),rows:stops.slice(0,-1).map((station,index)=>{const next=stops[index+1],value=state.speedDirections.map(direction=>{const result=travelTime(station.km,next.km,direction);return `${labels[direction]} ${result?formatTime(result.seconds):"--:--"}`;}).join("　");return {label:`${station.name} - ${next.name}`,value};})};}
   function openPrintDialog(open){const dialog=$("#printDialog");dialog.classList.toggle("open",Boolean(open));dialog.setAttribute("aria-hidden",String(!open));$("#printScrim").classList.toggle("hidden",!open);if(open){openSettings(false);updatePrintCalculationToggle();}}
   function setPrintLayout(layout){printLayout=layout;$$('[data-print-layout]').forEach(button=>button.classList.toggle("active",button.dataset.printLayout===layout));$("#printSectionControls").classList.toggle("hidden",layout!=="section");}
   function setPrintRangeMode(mode){printRangeMode=mode;$$('[data-print-range]').forEach(button=>button.classList.toggle("active",button.dataset.printRange===mode));$$('[data-print-range-control]').forEach(control=>control.classList.toggle("active",control.dataset.printRangeControl===mode));}
@@ -206,11 +219,11 @@
   function renderPrintSheet(){
     const range=printRange();if(range.end-range.start<.001){toast("開始と終了を別の位置にしてください");return false;}
     const sheet=$("#printSheet"),full=printLayout==="full",speedMode=state.mode==="speed"&&state.speedDirections.length>0,segments=full?[[0,10],[10,20],[20,30],[30,40],[40,50],[50,TOTAL]]:[[range.start,range.end]];sheet.classList.toggle("section",!full);sheet.setAttribute("aria-hidden","false");
-    const speedTitle=$("#printSpeedTitle");speedTitle.textContent=speedMode?`7000 ${printDirectionTitle()}`:"";speedTitle.classList.toggle("hidden",!speedMode);
+    const speedTitle=$("#printSpeedTitle");speedTitle.textContent=speedMode?`${trainLabel()} ${printDirectionTitle()}`:"";speedTitle.classList.toggle("hidden",!speedMode);
     const shortKm=value=>Math.abs(value-TOTAL)<.0001?"56.1k":`${Number(value.toFixed(1))}k`,calculation=full&&speedMode&&printShowCalculation?printCalculationData():null;
     const rows=segments.map(([start,end],index)=>{const title=full?`${shortKm(start)}　　${shortKm(end)}`:`${range.label}　${kmText(start)} - ${kmText(end)}`;return `<section class="print-row"><div class="print-row-title">${title}</div>${makePrintSvg(start,end,!full,full?start+10:end,index===5?calculation:null)}</section>`;});
     $("#printRows").innerHTML=full?[0,2,4].map(index=>`<section class="print-fold-section">${rows[index]}${rows[index+1]}</section>`).join(""):`<section class="print-fold-section">${rows[0]}</section>`;
-    const footer=$("#printSheetFooter"),withSectionCalculation=!full&&speedMode&&printShowCalculation;footer.classList.toggle("hidden",!withSectionCalculation);if(withSectionCalculation){const values=state.speedDirections.map(direction=>{const result=travelTime(range.start,range.end,direction);return `${direction==="up"?"上り":"下り"} <strong>${result?formatTime(result.seconds):"計算不可"}</strong>　平均 ${result?Math.round(result.average):"--"}km/h`;}).join("　　");footer.innerHTML=`<span><strong>計算値</strong>　7000／${kmText(range.start)}～${kmText(range.end)}</span><span>${values}</span>`;}
+    const footer=$("#printSheetFooter"),withSectionCalculation=!full&&speedMode&&printShowCalculation;footer.classList.toggle("hidden",!withSectionCalculation);if(withSectionCalculation){const values=state.speedDirections.map(direction=>{const result=travelTime(range.start,range.end,direction);return `${direction==="up"?"上り":"下り"} <strong>${result?formatTime(result.seconds):"計算不可"}</strong>　平均 ${result?Math.round(result.average):"--"}km/h`;}).join("　　");footer.innerHTML=`<span><strong>計算値</strong>　${trainLabel()}／${kmText(range.start)}～${kmText(range.end)}</span><span>${values}</span>`;}
     let pageStyle=$("#printPageStyle");if(!pageStyle){pageStyle=document.createElement("style");pageStyle.id="printPageStyle";document.head.append(pageStyle);}pageStyle.textContent=`@page{size:A4 ${full?"portrait":"landscape"};margin:8mm}`;return true;
   }
   function startPrint(){if(!renderPrintSheet())return;window.print();}
@@ -221,12 +234,12 @@
   function fitZoom(){return Math.max(4,((viewport().clientWidth||innerWidth)-PAD*2)/TOTAL);}
   function routeRatio(){if(!routeViewport.clientHeight)return state.routeYRatio;const max=routeViewport.scrollHeight-routeViewport.clientHeight;return max>0?routeViewport.scrollTop/max:.5;}
   function updateNavigator(km=center()){const value=Math.max(0,Math.min(TOTAL,km));positionSlider.value=value.toFixed(2);positionOutput.value=kmText(value);positionOutput.textContent=kmText(value);}
-  function save(){state.routeYRatio=routeRatio();try{localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers,speedDirections:state.speedDirections,selectedAssetId:state.selectedAssetId,assetStripOpen:state.assetStripOpen,timeMethod:state.timeMethod,timeStart:state.timeStart,timeEnd:state.timeEnd}));}catch(_){}}
+  function save(){state.routeYRatio=routeRatio();try{localStorage.setItem("chizu-line-v2-view",JSON.stringify({mode:state.mode,zoom:state.zoom,centerKm:center(),routeYRatio:state.routeYRatio,layers:state.layers,selectedTrain:state.selectedTrain,speedDirections:state.speedDirections,selectedAssetId:state.selectedAssetId,assetStripOpen:state.assetStripOpen,timeMethod:state.timeMethod,timeStart:state.timeStart,timeEnd:state.timeEnd}));}catch(_){}}
   function scrollCenter(km,instant=false){const v=viewport();v.scrollTo({left:Math.max(0,x(km)-v.clientWidth/2),behavior:instant?"auto":"smooth"});updateNavigator(km);}
   function restoreRouteY(ratio=state.routeYRatio){const max=routeViewport.scrollHeight-routeViewport.clientHeight;routeViewport.scrollTop=Math.max(0,Math.min(max,max*ratio));}
   function setZoom(next,km=center()){const yRatio=routeRatio();state.zoom=Math.max(fitZoom(),Math.min(600,next));renderRoute();renderSpeed();requestAnimationFrame(()=>{scrollCenter(km,true);restoreRouteY(yRatio);save();});}
   function fitAll(){state.routeYRatio=.5;setZoom(fitZoom(),TOTAL/2);requestAnimationFrame(()=>requestAnimationFrame(()=>{restoreRouteY(.5);save();}));}
-  function showItem(target,event){const g=target.closest("[data-name]");if(g){state.selected={km:Number(g.dataset.km)};const linked=assetForType(g.dataset.type,Number(g.dataset.km));if(linked)selectAsset(linked.id);$("#infoName").textContent=g.dataset.name;$("#infoKm").textContent=kmText(g.dataset.km);$("#infoType").textContent=g.dataset.type+(g.dataset.detail?`　${g.dataset.detail}`:"");$("#infoRelation").textContent=g.dataset.relation||"位置を表示しています";updateDetailDock(g.dataset.name,kmText(g.dataset.km));}else{if(state.mode!=="speed"||!event)return;const rect=routeViewport.getBoundingClientRect(),km=Math.max(0,Math.min(TOTAL,(routeViewport.scrollLeft+event.clientX-rect.left-PAD)/state.zoom)),p=D.speeds.reduce((best,item)=>Math.abs(item.km-km)<Math.abs(best.km-km)?item:best,D.speeds[0]);state.selected={km:p.km};$("#infoName").textContent="7000 速度";$("#infoKm").textContent=kmText(p.km);$("#infoType").textContent=`上り ${p.up} km/h　下り ${p.down} km/h`;$("#infoRelation").textContent="赤：上り　青：下り";updateDetailDock("7000 速度",kmText(p.km));}renderRoute();}
+  function showItem(target,event){const g=target.closest("[data-name]");if(g){state.selected={km:Number(g.dataset.km)};const linked=assetForType(g.dataset.type,Number(g.dataset.km));if(linked)selectAsset(linked.id);$("#infoName").textContent=g.dataset.name;$("#infoKm").textContent=kmText(g.dataset.km);$("#infoType").textContent=g.dataset.type+(g.dataset.detail?`　${g.dataset.detail}`:"");$("#infoRelation").textContent=g.dataset.relation||"位置を表示しています";updateDetailDock(g.dataset.name,kmText(g.dataset.km));}else{if(state.mode!=="speed"||!event)return;const rect=routeViewport.getBoundingClientRect(),km=Math.max(0,Math.min(TOTAL,(routeViewport.scrollLeft+event.clientX-rect.left-PAD)/state.zoom)),points=speedPoints(),p=points.reduce((best,item)=>Math.abs(item.km-km)<Math.abs(best.km-km)?item:best,points[0]);state.selected={km:p.km};$("#infoName").textContent=`${trainLabel()} 速度`;$("#infoKm").textContent=kmText(p.km);$("#infoType").textContent=`上り ${p.up} km/h　下り ${p.down} km/h`;$("#infoRelation").textContent="赤：上り　青：下り";updateDetailDock(`${trainLabel()} 速度`,kmText(p.km));}renderRoute();}
   function closeInfo(){state.selected=null;$("#infoName").textContent="詳細情報";$("#infoKm").textContent="設備を選択してください";$("#infoType").textContent="駅・信号機・地上子などをタップ";$("#infoRelation").textContent="選択した設備の情報をここに表示します";$("#dockDetailHint").textContent="選択なし";$("#detailDockBtn").classList.remove("has-data");setDetailPanel(false);renderRoute();}
   function buildSettings(){$("#layerSettings").innerHTML=layerInfo.map(([key,label,desc])=>`<div class="layer-row"><div class="layer-label"><strong>${label}</strong><span>${desc}</span></div><div class="tri-state" data-layer="${key}">${[["auto","自動"],["show","表示"],["hide","非表示"]].map(([value,text])=>`<button data-value="${value}" class="${(state.layers[key]||"auto")===value?"active":""}">${text}</button>`).join("")}</div></div>`).join("");$$('.tri-state button').forEach(b=>b.addEventListener("click",()=>{const h=b.closest('.tri-state');state.layers[h.dataset.layer]=b.dataset.value;h.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderRoute();save();}));}
   function openSettings(open){$("#settings").classList.toggle("open",open);$("#settings").setAttribute("aria-hidden",String(!open));$("#scrim").classList.toggle("hidden",!open);}
@@ -266,6 +279,7 @@
   $$('[data-time-method]').forEach(button=>button.addEventListener("click",()=>setTimeMethod(button.dataset.timeMethod)));$("#startStation").addEventListener("change",updateStationTime);$("#endStation").addEventListener("change",updateStationTime);
   $("#expressPresets").addEventListener("click",event=>{const button=event.target.closest("[data-express-index]");if(button)selectExpressPreset(Number(button.dataset.expressIndex));});
   for(const id of ["#startKm","#startM","#endKm","#endM"])$(id).addEventListener("change",updateDistanceTime);
+  $("#trainSelect").addEventListener("change",event=>selectTrain(event.target.value));
   $$(".mode-tab").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));$$('[data-speed]').forEach(i=>{i.checked=state.speedDirections.includes(i.dataset.speed);i.addEventListener("change",()=>{state.speedDirections=$$('[data-speed]:checked').map(item=>item.dataset.speed);updatePrintCalculationToggle();renderRoute();renderSpeed();save();});});
   routeSvg.addEventListener("click",e=>showItem(e.target,e));routeSvg.addEventListener("keydown",e=>{if(["Enter"," "].includes(e.key))showItem(e.target,e);});
   assetStrip.addEventListener("pointerdown",event=>{if(!state.assetStripOpen||event.target.closest("button")||stripGesture)return;assetStrip.setPointerCapture?.(event.pointerId);stripGesture={id:event.pointerId,startX:event.clientX,startScroll:routeViewport.scrollLeft,moved:false};});

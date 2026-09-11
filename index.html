@@ -40,10 +40,10 @@
           <div class="asset-strip-lanes" aria-hidden="true"><span>駅・Ｔ</span><span>線形</span><span>信号</span><span>地上子</span></div>
         </div>
         <div id="speedOverlayTools" class="speed-overlay-tools hidden" aria-label="速度カーブ選択">
-          <strong>7000</strong>
+          <select id="trainSelect" aria-label="速度を表示する列車"><option value="7000">7000</option><option value="187">187</option><option value="3500">3500</option></select>
           <label class="line-toggle up"><input type="checkbox" data-speed="up" checked><span>上り</span></label>
           <label class="line-toggle down"><input type="checkbox" data-speed="down"><span>下り</span></label>
-          <small>0–140 km/h</small>
+          <small>0–150 km/h</small>
         </div>
         <div class="zoom-buttons" aria-label="拡大縮小">
           <button id="zoomInBtn" aria-label="拡大">＋</button>
@@ -58,11 +58,11 @@
           <strong>速度カーブ</strong>
           <div class="train-grid" aria-label="列車と方向">
             <div class="train-row"><span>7000</span></div>
-            <div class="train-row unavailable"><span>列車②</span><button disabled>データ未登録</button></div>
-            <div class="train-row unavailable"><span>列車③</span><button disabled>データ未登録</button></div>
+            <div class="train-row"><span>187</span></div>
+            <div class="train-row"><span>3500</span></div>
           </div>
         </div>
-        <div id="speedViewport" class="rail-viewport speed-viewport"><svg id="speedSvg" role="img" aria-label="7000の上り下り速度カーブ"></svg></div>
+        <div id="speedViewport" class="rail-viewport speed-viewport"><svg id="speedSvg" role="img" aria-label="選択列車の上り下り速度カーブ"></svg></div>
       </section>
 
       <section id="assetWorkspace" class="workspace asset-workspace hidden" aria-label="構造物・設備一覧">
@@ -100,8 +100,8 @@
             <button id="timeClose" class="info-close" aria-label="時間計算を閉じる">×</button>
           </div>
           <div class="time-results" aria-live="polite">
-            <div class="time-result up"><span>7000 上り</span><strong id="upTimeResult">--:--</strong><small id="upAverageResult">平均 -- km/h</small></div>
-            <div class="time-result down"><span>7000 下り</span><strong id="downTimeResult">--:--</strong><small id="downAverageResult">平均 -- km/h</small></div>
+            <div class="time-result up"><span id="upTimeTrain">7000 上り</span><strong id="upTimeResult">--:--</strong><small id="upAverageResult">平均 -- km/h</small></div>
+            <div class="time-result down"><span id="downTimeTrain">7000 下り</span><strong id="downTimeResult">--:--</strong><small id="downAverageResult">平均 -- km/h</small></div>
             <div class="time-distance"><span>計算距離</span><strong id="timeDistanceResult">56.100 km</strong><small>100mごとの速度から計算</small></div>
           </div>
           <div class="time-methods" role="tablist" aria-label="区間指定方法">
@@ -178,6 +178,7 @@
     <footer id="printSheetFooter" class="print-sheet-footer hidden"></footer>
   </section>
   <script src="route-data.js"></script>
+  <script src="speed-data.js"></script>
   <script src="asset-data.js"></script>
   <script src="app.js"></script>
 </body>
